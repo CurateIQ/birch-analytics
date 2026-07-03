@@ -219,7 +219,9 @@ export async function fetchDwellingItems() {
     const ageMs = now - new Date(order.created_at).getTime();
     const dwellHours = Math.floor(ageMs / (60 * 60 * 1000));
     for (const item of (order.line_items || [])) {
-      if ((item.fulfillable_quantity || 0) <= 0) continue;
+      // fulfillable_quantity drops to 0 when a fulfillment is requested (even before shipping)
+      // so check fulfillment_status instead — only skip fully fulfilled items
+      if (item.fulfillment_status === 'fulfilled') continue;
       const isFBB = item.fulfillment_service === 'manual';
       items.push({
         orderId: order.id,
