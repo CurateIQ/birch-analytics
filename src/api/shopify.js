@@ -182,3 +182,104 @@ export function calcWoWChange(current, previous) {
   if (!previous || previous === 0) return null;
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
+
+/**
+ * Fetch line items from unfulfilled/partial orders that have been waiting >24h.
+ * One row per unfulfilled line item.
+ * Returns: [{ orderId, orderName, title, brand, isFBB, dwellHours }]
+ */
+export async function fetchDwellingItems() {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [unfulfilled, partial] = await Promise.all([
+    shopifyFetch('/orders', {
+      status: 'open',
+      fulfillment_status: 'unfulfilled',
+      created_at_min: thirtyDaysAgo.toISOString(),
+      created_at_max: cutoff.toISOString(),
+      limit: 250,
+      fields: 'id,name,created_at,line_items',
+    }),
+    shopifyFetch('/orders', {
+      status: 'open',
+      fulfillment_status: 'partial',
+      created_at_min: thirtyDaysAgo.toISOString(),
+      created_at_max: cutoff.toISOString(),
+      limit: 250,
+      fields: 'id,name,created_at,line_items',
+    }),
+  ]);
+
+  const orders = [...(unfulfilled.orders || []), ...(partial.orders || [])];
+  const now = Date.now();
+  const items = [];
+
+  for (const order of orders) {
+    const ageMs = now - new Date(order.created_at).getTime();
+    const dwellHours = Math.floor(ageMs / (60 * 60 * 1000));
+    for (const item of (order.line_items || [])) {
+      if ((item.fulfillable_quantity || 0) <= 0) continue;
+      const isFBB = item.fulfillment_service === 'manual';
+      items.push({
+        orderId: order.id,
+        orderName: order.name || `#${order.id}`,
+        title: item.title,
+        brand: isFBB ? 'FBB' : (item.vendor || 'Unknown'),
+        isFBB,
+        dwellHours,
+      });
+    }
+  }
+
+  return items.sort((a, b) => b.dwellHours - a.dwellHours);
+}
+
+/**
+ * Fetch fulfillments that shipped 5+ days ago and haven't been marked delivered.
+ * One row per undelivered fulfillment line item.
+ * Returns: [{ orderId, orderName, title, brand, isFBB, carrier, destination, daysOld }]
+ */
+export async function fetchLateDeliveries() {
+  const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const data = await shopifyFetch('/orders', {
+    status: 'open',
+    created_at_min: thirtyDaysAgo.toISOString(),
+    created_at_max: fiveDaysAgo.toISOString(),
+    limit: 250,
+    fields: 'id,name,created_at,line_items,fulfillments,shipping_address',
+  });
+
+  const orders = data.orders || [];
+  const now = Date.now();
+  const items = [];
+
+  for (const order of orders) {
+    const daysOld = Math.floor((now - new Date(order.created_at).getTime()) / (24 * 60 * 60 * 1000));
+    const dest = [order.shipping_address?.city, order.shipping_address?.province_code]
+      .filter(Boolean).join(', ') || '—';
+
+    for (const fulfillment of (order.fulfillments || [])) {
+      if (fulfillment.shipment_status === 'delivered') continue;
+      if (fulfillment.status === 'cancelled') continue;
+      const carrier = fulfillment.tracking_company || '—';
+      for (const item of (fulfillment.line_items || [])) {
+        const isFBB = item.fulfillment_service === 'manual';
+        items.push({
+          orderId: order.id,
+          orderName: order.name || `#${order.id}`,
+          title: item.title,
+          brand: isFBB ? 'FBB' : (item.vendor || 'Unknown'),
+          isFBB,
+          carrier,
+          destination: dest,
+          daysOld,
+        });
+      }
+    }
+  }
+
+  return items.sort((a, b) => b.daysOld - a.daysOld);
+}

@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   fetchOrders, fetchCustomers, fetchProducts,
   fetchRefunds, fetchFulfillmentMetrics,
+  fetchDwellingItems, fetchLateDeliveries,
   calcOrderMetrics, calcDailyGMV, calcGMVByBrand,
   calcGMVByCategory, calcBrandConcentration,
   calcCatalogMetrics, calcNewBrands, calcCustomerMetrics,
@@ -22,6 +23,7 @@ import {
   fetchDailySessions,
   fetchTopLandingPages,
   fetchEngagementMetrics,
+  fetchCartAbandonRate,
 } from '../api/ga4';
 
 const TZ = 'America/New_York';
@@ -92,7 +94,8 @@ export function useDashboardData() {
         currentProducts,
         refundData, fulfillmentData,
         klaviyoLists,
-        ga4Traffic, ga4DailySessions, ga4LandingPages, ga4Engagement,
+        ga4Traffic, ga4DailySessions, ga4LandingPages, ga4Engagement, ga4CartAbandon,
+        opsDwelling, opsLate,
       ] = await Promise.allSettled([
         fetchOrders(ranges.todayStart,     ranges.todayEnd),
         fetchOrders(ranges.yesterdayStart, ranges.yesterdayEnd),
@@ -111,6 +114,9 @@ export function useDashboardData() {
         fetchDailySessions(ranges.twoWeeksStart, ranges.weekEnd),
         fetchTopLandingPages(ranges.weekStart, ranges.weekEnd),
         fetchEngagementMetrics(ranges.weekStart, ranges.weekEnd),
+        fetchCartAbandonRate(ranges.todayStart, ranges.todayEnd),
+        fetchDwellingItems(),
+        fetchLateDeliveries(),
       ]);
 
       const r = (res, fb) => res.status === 'fulfilled' ? res.value : fb;
@@ -127,10 +133,13 @@ export function useDashboardData() {
       const refunds  = r(refundData,        { returnRate: 0, refundCount: 0 });
       const fulfill  = r(fulfillmentData,   { avgFulfillmentDays: null });
       const klaviyo  = r(klaviyoLists,      { totalProfiles: 0, lists: [] });
-      const traffic   = r(ga4Traffic,        null);
-      const dailySess = r(ga4DailySessions,  []);
-      const landingPg = r(ga4LandingPages,   []);
-      const engage    = r(ga4Engagement,     {});
+      const traffic      = r(ga4Traffic,        null);
+      const dailySess    = r(ga4DailySessions,  []);
+      const landingPg    = r(ga4LandingPages,   []);
+      const engage       = r(ga4Engagement,     {});
+      const cartAbandon  = r(ga4CartAbandon,    null);
+      const dwelling     = r(opsDwelling,       []);
+      const late         = r(opsLate,           []);
 
       // Weekly metrics
       const weekM    = calcOrderMetrics(wOrders);
@@ -152,8 +161,7 @@ export function useDashboardData() {
       const mauSet = new Set(mOrders.map(o => o.customer?.id).filter(Boolean));
       const wauSet = new Set(wOrders.map(o => o.customer?.id).filter(Boolean));
 
-      // Today cart abandon — needs session data (GA4), placeholder
-      const todayCartAbandon = null;
+      const todayCartAbandon = cartAbandon !== null ? cartAbandon / 100 : null;
 
       setData({
         ranges,
@@ -203,6 +211,10 @@ export function useDashboardData() {
           avgFulfillmentDays: fulfill.avgFulfillmentDays,
           overallReturnRate: refunds.returnRate,
           gmvByBrand,
+        },
+        operations: {
+          dwelling,
+          late,
         },
         email: {
           totalListSize: klaviyo.totalProfiles,

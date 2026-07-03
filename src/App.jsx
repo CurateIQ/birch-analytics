@@ -221,7 +221,96 @@ export default function App() {
                   <KPICard label="Conversion rate"   value={data.customers.conversionRate ? fmt.pct(data.customers.conversionRate) : null} change={null} changeLabel="GA4 pending" definition={DEFS.conversion} />
                 </div>
 
-                {/* #3 Website Traffic — GA4 */}
+                {/* #3 Operations */}
+                <SectionLabel id="sec-operations">Operations</SectionLabel>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:4 }}>
+
+                  {/* Dwelling orders table */}
+                  <div style={{ background:'#FFFFFF', border:'0.5px solid #E0DDD6', borderRadius:10, padding:'12px 14px', overflow:'hidden' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10 }}>
+                      <span style={{ fontSize:12, fontWeight:600, color:'#3D3226' }}>Dwelling orders</span>
+                      <span style={{ fontSize:10, background:'#F0EDE6', color:'#5F5E5A', padding:'1px 7px', borderRadius:99, fontWeight:600 }}>
+                        {(data.operations?.dwelling?.length || 0)} items
+                      </span>
+                    </div>
+                    {(data.operations?.dwelling?.length || 0) === 0 ? (
+                      <div style={{ fontSize:12, color:'#8C8A85', padding:'8px 0' }}>No orders dwelling &gt;24h ✓</div>
+                    ) : (
+                      <div style={{ overflowX:'auto' }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'72px 1fr 64px 56px', gap:'0 6px', fontSize:10, minWidth:280 }}>
+                          {['Order #','Item','Brand','Dwell'].map(h => (
+                            <div key={h} style={{ fontWeight:700, color:'#8C8A85', textTransform:'uppercase', letterSpacing:'0.06em', paddingBottom:5, borderBottom:'1px solid #E0DDD6', whiteSpace:'nowrap' }}>{h}</div>
+                          ))}
+                          {(data.operations?.dwelling || []).map((item, i) => {
+                            const dwellColor = item.dwellHours > 48 ? '#A32D2D' : item.dwellHours > 36 ? '#854F0B' : '#8C8A85';
+                            return (
+                              <React.Fragment key={i}>
+                                <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6' }}>
+                                  <a href={`https://admin.shopify.com/store/birchstoreco/orders/${item.orderId}`} target="_blank" rel="noopener noreferrer"
+                                    style={{ fontFamily:'DM Mono, monospace', fontSize:10, color:'#378ADD', textDecoration:'none' }}>
+                                    {item.orderName}
+                                  </a>
+                                </div>
+                                <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', color:'#3D3226', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={item.title}>{item.title}</div>
+                                <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6' }}>
+                                  {item.isFBB
+                                    ? <span style={{ color:'#6B3FA0', fontWeight:600 }}>FBB</span>
+                                    : <span style={{ color:'#5F5E5A' }}>{item.brand}</span>}
+                                </div>
+                                <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', color:dwellColor, fontWeight:500, fontFamily:'DM Mono, monospace' }}>{item.dwellHours}h</div>
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Late deliveries table */}
+                  <div style={{ background:'#FFFFFF', border:'0.5px solid #E0DDD6', borderRadius:10, padding:'12px 14px', overflow:'hidden' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10 }}>
+                      <span style={{ fontSize:12, fontWeight:600, color:'#3D3226' }}>Late deliveries</span>
+                      <span style={{ fontSize:10, background:'#F0EDE6', color:'#5F5E5A', padding:'1px 7px', borderRadius:99, fontWeight:600 }}>
+                        {(data.operations?.late?.length || 0)} items
+                      </span>
+                    </div>
+                    {(data.operations?.late?.length || 0) === 0 ? (
+                      <div style={{ fontSize:12, color:'#8C8A85', padding:'8px 0' }}>No late deliveries ✓</div>
+                    ) : (
+                      <div style={{ overflowX:'auto' }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'72px 1fr 64px 80px 36px', gap:'0 6px', fontSize:10, minWidth:340 }}>
+                          {['Order #','Item','Brand','Carrier / Dest','Days'].map(h => (
+                            <div key={h} style={{ fontWeight:700, color:'#8C8A85', textTransform:'uppercase', letterSpacing:'0.06em', paddingBottom:5, borderBottom:'1px solid #E0DDD6', whiteSpace:'nowrap' }}>{h}</div>
+                          ))}
+                          {(data.operations?.late || []).map((item, i) => {
+                            const daysColor = item.daysOld > 7 ? '#A32D2D' : '#854F0B';
+                            return (
+                              <React.Fragment key={i}>
+                                <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6' }}>
+                                  <a href={`https://admin.shopify.com/store/birchstoreco/orders/${item.orderId}`} target="_blank" rel="noopener noreferrer"
+                                    style={{ fontFamily:'DM Mono, monospace', fontSize:10, color:'#378ADD', textDecoration:'none' }}>
+                                    {item.orderName}
+                                  </a>
+                                </div>
+                                <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', color:'#3D3226', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={item.title}>{item.title}</div>
+                                <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6' }}>
+                                  {item.isFBB
+                                    ? <span style={{ color:'#6B3FA0', fontWeight:600 }}>FBB</span>
+                                    : <span style={{ color:'#5F5E5A' }}>{item.brand}</span>}
+                                </div>
+                                <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', color:'#5F5E5A', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.carrier} / {item.destination}</div>
+                                <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', color:daysColor, fontWeight:600, fontFamily:'DM Mono, monospace' }}>{item.daysOld}d</div>
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* #4 Website Traffic — GA4 */}
                 <SectionLabel id="sec-website">Website Traffic</SectionLabel>
 
                 {data.website?.connected === false && (

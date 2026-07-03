@@ -140,6 +140,37 @@ export async function fetchTopLandingPages(weekStart, weekEnd) {
 }
 
 /**
+ * Fetch cart abandonment rate for a date range.
+ * Rate = 1 - (purchases / add_to_carts). Returns null if no add_to_cart events.
+ */
+export async function fetchCartAbandonRate(startDate, endDate) {
+  const report = await ga4Fetch({
+    dateRanges: [{ startDate: fmtDate(new Date(startDate)), endDate: fmtDate(new Date(endDate)) }],
+    dimensions: [{ name: 'eventName' }],
+    metrics: [{ name: 'eventCount' }],
+    dimensionFilter: {
+      filter: {
+        fieldName: 'eventName',
+        inListFilter: { values: ['add_to_cart', 'purchase'] },
+      },
+    },
+  });
+
+  const rows = report?.rows || [];
+  let addToCart = 0;
+  let purchases = 0;
+  rows.forEach(row => {
+    const name = row.dimensionValues?.[0]?.value;
+    const count = parseInt(row.metricValues?.[0]?.value || '0', 10);
+    if (name === 'add_to_cart') addToCart = count;
+    if (name === 'purchase') purchases = count;
+  });
+
+  if (addToCart === 0) return null;
+  return Math.round(((addToCart - purchases) / addToCart) * 100);
+}
+
+/**
  * Fetch overall engagement metrics for the week.
  * Returns: { avgSessionDuration, pagesPerSession, bounceRate, newUserPct }
  */

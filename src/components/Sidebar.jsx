@@ -11,6 +11,7 @@ const SECTIONS = [
     items: [
       { id:'orders',      icon:'📦', name:'Orders & Transactions', sub:'GMV, AOV, returns, cart abandon',   status:'live' },
       { id:'customers',   icon:'👥', name:'Customers',             sub:'MAU, WAU, new vs returning',         status:'live' },
+      { id:'operations',  icon:'⚙️', name:'Operations',            sub:'Dwelling orders, late deliveries',   status:'live' },
       { id:'website',     icon:'🌐', name:'Website Traffic',       sub:'Sessions, channels, landing pages',  status:'live' },
       { id:'growth',      icon:'📈', name:'Growth & Catalog',      sub:'GMV by brand, category trends',      status:'live' },
       { id:'marketplace', icon:'🏪', name:'Marketplace & Supply',  sub:'Brands, SKUs, fulfillment',          status:'live' },
@@ -23,7 +24,6 @@ const SECTIONS = [
       { id:'revenue',    icon:'💰', name:'Revenue & Unit Economics', sub:'Take rate, margin, burn, runway',  status:'soon' },
       { id:'marketing',  icon:'📣', name:'Marketing',               sub:'CAC, paid, organic, influencer',    status:'soon' },
       { id:'brands',     icon:'🏷️', name:'Brand Health',           sub:'Per-brand orders, returns, SLA',    status:'soon' },
-      { id:'operations', icon:'⚙️', name:'Operations',             sub:'Support tickets, CSAT, shipping',   status:'soon' },
       { id:'finance',    icon:'🧾', name:'Finance & Tax',          sub:'Net revenue, tax, compliance',       status:'soon' },
     ],
   },
