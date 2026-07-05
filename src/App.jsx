@@ -63,6 +63,65 @@ function SectionLabel({ id, children }) {
   );
 }
 
+const STOP_WORDS = new Set([
+  'a','an','the','is','are','was','were','be','been','being','have','has','had',
+  'do','does','did','will','would','could','should','may','might','can','cant',
+  'i','my','me','we','our','you','your','it','its','this','that','these','those',
+  'and','or','but','in','on','at','to','for','of','with','from','by','about',
+  'what','how','why','when','where','which','who','get','show','tell','give','see',
+  'please','birch','want','need','looking','find','know','like','just','also',
+  'more','some','any','all','not','no','so','if','up','out','than','then','them',
+]);
+
+function WordCloud({ queries }) {
+  if (!queries?.length) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:100, color:'#8C8A85', fontSize:12 }}>
+        ⏳ Data builds as customers use Ask Birch
+      </div>
+    );
+  }
+
+  const wordCount = {};
+  queries.forEach(({ query, count }) => {
+    query.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).forEach(word => {
+      if (word.length > 2 && !STOP_WORDS.has(word)) {
+        wordCount[word] = (wordCount[word] || 0) + count;
+      }
+    });
+  });
+
+  const words = Object.entries(wordCount)
+    .map(([word, count]) => ({ word, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 50);
+
+  if (!words.length) return null;
+
+  const maxCount = words[0].count;
+  const COLORS = ['#3D3226','#5A7A5C','#378ADD','#C8763A','#7A5C8A','#3A8A8A','#854F0B','#5F5E5A'];
+
+  return (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 14px', alignItems:'center', justifyContent:'center', padding:'14px 8px', minHeight:110 }}>
+      {words.map(({ word, count }, i) => {
+        const ratio = count / maxCount;
+        const size = Math.round(10 + ratio * 20);
+        const weight = ratio > 0.6 ? 700 : ratio > 0.3 ? 600 : 400;
+        const color = COLORS[i % COLORS.length];
+        const opacity = 0.55 + ratio * 0.45;
+        return (
+          <span key={word} title={`${count} mention${count !== 1 ? 's' : ''}`}
+            style={{ fontSize:size, fontWeight:weight, color, opacity, cursor:'default', lineHeight:1.3, transition:'opacity 0.15s' }}
+            onMouseEnter={e => e.target.style.opacity = 1}
+            onMouseLeave={e => e.target.style.opacity = opacity}>
+            {word}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function ChartCard({ title, children, style }) {
   return (
     <div style={{ background:'#FFFFFF', border:'0.5px solid #E0DDD6', borderRadius:10, padding:'12px 14px', ...style }}>
@@ -220,6 +279,10 @@ export default function App() {
                   <KPICard label="Returning orders %" value={fmt.pct(data.customers.returningOrdersPct)} change={null}                     definition={DEFS.returningPct} />
                   <KPICard label="Conversion rate"   value={data.customers.conversionRate ? fmt.pct(data.customers.conversionRate) : null} change={null} changeLabel="GA4 pending" definition={DEFS.conversion} />
                 </div>
+
+                <ChartCard title="What are customers asking? — last 7 days" style={{ marginTop:10 }}>
+                  <WordCloud queries={data.askBirch?.topQueries} />
+                </ChartCard>
 
                 {/* #3 Operations */}
                 <SectionLabel id="sec-operations">Operations</SectionLabel>
