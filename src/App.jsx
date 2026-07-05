@@ -499,6 +499,57 @@ export default function App() {
                   <KPICard label="Overall return rate"     value={fmt.pct(data.marketplace.overallReturnRate)}  change={null} definition={DEFS.overallReturn} />
                 </div>
 
+                {/* Ask Birch Queries */}
+                <SectionLabel id="sec-askbirch">Ask Birch — Customer Queries</SectionLabel>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+
+                  {/* Top queries */}
+                  <div style={{ background:'#FFFFFF', border:'0.5px solid #E0DDD6', borderRadius:10, padding:'12px 14px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10 }}>
+                      <span style={{ fontSize:12, fontWeight:600, color:'#3D3226' }}>Top queries (7 days)</span>
+                      <span style={{ fontSize:10, background:'#F0EDE6', color:'#5F5E5A', padding:'1px 7px', borderRadius:99, fontWeight:600 }}>
+                        {data.askBirch?.total || 0} total
+                      </span>
+                    </div>
+                    {(data.askBirch?.topQueries?.length || 0) === 0 ? (
+                      <div style={{ fontSize:12, color:'#8C8A85', padding:'8px 0' }}>No queries yet — data builds as customers chat</div>
+                    ) : (
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 36px', gap:'0 8px', fontSize:10 }}>
+                        {['Query','#'].map(h => (
+                          <div key={h} style={{ fontWeight:700, color:'#8C8A85', textTransform:'uppercase', letterSpacing:'0.06em', paddingBottom:5, borderBottom:'1px solid #E0DDD6' }}>{h}</div>
+                        ))}
+                        {(data.askBirch.topQueries || []).slice(0, 15).map((q, i) => (
+                          <React.Fragment key={i}>
+                            <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', color:'#3D3226', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={q.query}>{q.query}</div>
+                            <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', color:'#378ADD', fontWeight:600, fontFamily:'DM Mono, monospace', textAlign:'right' }}>{q.count}</div>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Recent queries */}
+                  <div style={{ background:'#FFFFFF', border:'0.5px solid #E0DDD6', borderRadius:10, padding:'12px 14px' }}>
+                    <div style={{ fontSize:12, fontWeight:600, color:'#3D3226', marginBottom:10 }}>Recent queries</div>
+                    {(data.askBirch?.recent?.length || 0) === 0 ? (
+                      <div style={{ fontSize:12, color:'#8C8A85', padding:'8px 0' }}>No queries yet</div>
+                    ) : (
+                      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                        {(data.askBirch.recent || []).slice(0, 12).map((q, i) => (
+                          <div key={i} style={{ borderBottom:'0.5px solid #F0EDE6', paddingBottom:5 }}>
+                            <div style={{ fontSize:11, color:'#3D3226', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={q.query}>{q.query}</div>
+                            <div style={{ fontSize:10, color:'#8C8A85', marginTop:1, display:'flex', gap:6 }}>
+                              <span>{q.ts ? new Date(q.ts).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : ''}</span>
+                              {q.source && q.source !== 'unknown' && <span style={{ background:'#F0EDE6', padding:'0 5px', borderRadius:4 }}>{q.source}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
                 {/* Email */}
                 <SectionLabel id="sec-email">Email & CRM</SectionLabel>
                 <div className="kpi-grid">

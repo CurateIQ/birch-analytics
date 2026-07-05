@@ -16,6 +16,7 @@ const SECTIONS = [
       { id:'growth',      icon:'📈', name:'Growth & Catalog',      sub:'GMV by brand, category trends',      status:'live' },
       { id:'marketplace', icon:'🏪', name:'Marketplace & Supply',  sub:'Brands, SKUs, fulfillment',          status:'live' },
       { id:'email',       icon:'✉️', name:'Email & CRM',           sub:'List size, open rate, click rate',   status:'live' },
+      { id:'askbirch',    icon:'💬', name:'Ask Birch Queries',     sub:'What customers are asking',          status:'live' },
     ],
   },
   {

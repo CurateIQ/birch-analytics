@@ -95,7 +95,7 @@ export function useDashboardData() {
         refundData, fulfillmentData,
         klaviyoLists,
         ga4Traffic, ga4DailySessions, ga4LandingPages, ga4Engagement, ga4CartAbandon,
-        opsDwelling, opsLate,
+        opsDwelling, opsLate, aiQueries,
       ] = await Promise.allSettled([
         fetchOrders(ranges.todayStart,     ranges.todayEnd),
         fetchOrders(ranges.yesterdayStart, ranges.yesterdayEnd),
@@ -117,6 +117,7 @@ export function useDashboardData() {
         fetchCartAbandonRate(ranges.todayStart, ranges.todayEnd),
         fetchDwellingItems(),
         fetchLateDeliveries(),
+        fetch(`https://ez5e63jmydqmttr3qorvopyyt40baytn.lambda-url.us-east-1.on.aws/ai/queries?days=7`).then(r => r.json()),
       ]);
 
       const r = (res, fb) => res.status === 'fulfilled' ? res.value : fb;
@@ -140,6 +141,7 @@ export function useDashboardData() {
       const cartAbandon  = r(ga4CartAbandon,    null);
       const dwelling     = r(opsDwelling,       []);
       const late         = r(opsLate,           []);
+      const queries      = r(aiQueries,         { total: 0, topQueries: [], recent: [] });
 
       // Weekly metrics
       const weekM    = calcOrderMetrics(wOrders);
@@ -215,6 +217,11 @@ export function useDashboardData() {
         operations: {
           dwelling,
           late,
+        },
+        askBirch: {
+          total:      queries.total,
+          topQueries: queries.topQueries,
+          recent:     queries.recent,
         },
         email: {
           totalListSize: klaviyo.totalProfiles,

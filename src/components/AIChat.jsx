@@ -69,6 +69,7 @@ Answer concisely using this data. Be direct and analytical.`;
         body: JSON.stringify({
           system: buildSystem(),
           messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })),
+          source: 'dashboard',
         }),
       });
       const data = await res.json();
