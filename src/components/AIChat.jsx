@@ -3,8 +3,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-
-const PROXY = 'https://ez5e63jmydqmttr3qorvopyyt40baytn.lambda-url.us-east-1.on.aws';
+import { PROXY, PROXY_HEADERS } from '../api/proxy';
 
 const SUGGESTIONS = [
   'What was the top selling brand this week?',
@@ -65,7 +64,7 @@ Answer concisely using this data. Be direct and analytical.`;
     try {
       const res = await fetch(`${PROXY}/ai`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...PROXY_HEADERS },
         body: JSON.stringify({
           system: buildSystem(),
           messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })),

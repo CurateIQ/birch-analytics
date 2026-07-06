@@ -1,0 +1,8 @@
+node_modules/
+build/
+
+# local env (holds REACT_APP_PROXY_KEY)
+.env.local
+
+# lambda deploy artifact
+lambda/function.zip

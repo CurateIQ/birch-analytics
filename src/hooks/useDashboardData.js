@@ -18,6 +18,7 @@ import {
   calcWoWChange,
 } from '../api/shopify';
 import { fetchListMetrics } from '../api/klaviyo';
+import { PROXY, PROXY_HEADERS } from '../api/proxy';
 import {
   fetchTrafficByChannel,
   fetchDailySessions,
@@ -117,7 +118,7 @@ export function useDashboardData() {
         fetchCartAbandonRate(ranges.todayStart, ranges.todayEnd),
         fetchDwellingItems(),
         fetchLateDeliveries(),
-        fetch(`https://ez5e63jmydqmttr3qorvopyyt40baytn.lambda-url.us-east-1.on.aws/ai/queries?days=7`).then(r => r.json()),
+        fetch(`${PROXY}/ai/queries?days=7&limit=25`, { headers: PROXY_HEADERS }).then(r => r.json()),
       ]);
 
       const r = (res, fb) => res.status === 'fulfilled' ? res.value : fb;

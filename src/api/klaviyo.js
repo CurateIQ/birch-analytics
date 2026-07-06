@@ -3,12 +3,12 @@
  * Klaviyo API calls routed through the birch-api-proxy Lambda.
  */
 
-const PROXY = 'https://ez5e63jmydqmttr3qorvopyyt40baytn.lambda-url.us-east-1.on.aws';
+import { PROXY, PROXY_HEADERS } from './proxy';
 
 async function klaviyoFetch(endpoint, params = {}) {
   const url = new URL(`${PROXY}/klaviyo${endpoint}`);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { headers: PROXY_HEADERS });
   if (!res.ok) throw new Error(`Klaviyo API error: ${res.status}`);
   return res.json();
 }

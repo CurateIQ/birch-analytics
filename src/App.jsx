@@ -11,6 +11,7 @@ import { KPICard } from './components/KPICard';
 import { AIChat } from './components/AIChat';
 import { TodayStrip } from './components/TodayStrip';
 import { Sidebar } from './components/Sidebar';
+import { ChatTranscriptModal, customerAdminUrl } from './components/ChatTranscriptModal';
 
 const fmt = {
   usd:    v => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { minimumFractionDigits:0, maximumFractionDigits:0 })}`,
@@ -145,6 +146,7 @@ export default function App() {
   const { data, loading, error, lastUpdated, refresh } = useDashboardData();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('orders');
+  const [chatSessionId, setChatSessionId] = useState(null);
   const metricsRef = useRef(null);
 
   const now = new Date();
@@ -591,19 +593,38 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Recent queries */}
+                  {/* Recent chats */}
                   <div style={{ background:'#FFFFFF', border:'0.5px solid #E0DDD6', borderRadius:10, padding:'12px 14px' }}>
-                    <div style={{ fontSize:12, fontWeight:600, color:'#3D3226', marginBottom:10 }}>Recent queries</div>
+                    <div style={{ fontSize:12, fontWeight:600, color:'#3D3226', marginBottom:10 }}>Recent chats</div>
                     {(data.askBirch?.recent?.length || 0) === 0 ? (
                       <div style={{ fontSize:12, color:'#8C8A85', padding:'8px 0' }}>No queries yet</div>
                     ) : (
                       <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
                         {(data.askBirch.recent || []).slice(0, 12).map((q, i) => (
-                          <div key={i} style={{ borderBottom:'0.5px solid #F0EDE6', paddingBottom:5 }}>
-                            <div style={{ fontSize:11, color:'#3D3226', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={q.query}>{q.query}</div>
-                            <div style={{ fontSize:10, color:'#8C8A85', marginTop:1, display:'flex', gap:6 }}>
+                          <div key={q.sessionId || i} style={{ borderBottom:'0.5px solid #F0EDE6', paddingBottom:5 }}>
+                            <div style={{ fontSize:11, color:'#3D3226', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={q.query}>
+                              {q.query || '(no title)'}
+                            </div>
+                            <div style={{ fontSize:10, color:'#8C8A85', marginTop:1, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                               <span>{q.ts ? new Date(q.ts).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : ''}</span>
-                              {q.source && q.source !== 'unknown' && <span style={{ background:'#F0EDE6', padding:'0 5px', borderRadius:4 }}>{q.source}</span>}
+                              {q.messageCount != null && <span>{q.messageCount} msg</span>}
+                              {q.wasEscalated && <span style={{ color:'#B0483C', fontWeight:600 }}>escalated</span>}
+                              {customerAdminUrl(q.customerId) ? (
+                                <a href={customerAdminUrl(q.customerId)} target="_blank" rel="noreferrer"
+                                   style={{ color:'#378ADD', fontWeight:600, textDecoration:'none' }}>
+                                  Customer ↗
+                                </a>
+                              ) : (
+                                <span>guest</span>
+                              )}
+                              {q.sessionId && (
+                                <button onClick={() => setChatSessionId(q.sessionId)}
+                                  style={{ border:'none', background:'#F0EDE6', color:'#3D3226', borderRadius:4,
+                                           padding:'1px 7px', fontSize:10, fontWeight:600, cursor:'pointer',
+                                           fontFamily:'inherit' }}>
+                                  View chat
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -637,6 +658,9 @@ export default function App() {
       <div style={{}} className="topbar-right-mobile">
         <AIChat dashboardData={data} />
       </div>
+      {chatSessionId && (
+        <ChatTranscriptModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
+      )}
     </>
   );
 }

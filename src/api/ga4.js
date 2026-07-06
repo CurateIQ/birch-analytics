@@ -11,13 +11,14 @@
  * The Lambda proxy forwards requests to the GA4 Data API using the service account credentials.
  */
 
-const PROXY = 'https://ez5e63jmydqmttr3qorvopyyt40baytn.lambda-url.us-east-1.on.aws';
+import { PROXY, PROXY_HEADERS } from './proxy';
+
 const PROPERTY_ID = process.env.REACT_APP_GA4_PROPERTY_ID || '538994991';
 
 async function ga4Fetch(body) {
   const res = await fetch(`${PROXY}/ga4/runReport`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...PROXY_HEADERS },
     body: JSON.stringify({ propertyId: PROPERTY_ID, ...body }),
   });
   if (!res.ok) {

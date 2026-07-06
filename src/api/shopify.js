@@ -4,12 +4,12 @@
  * Proxy URL: https://ez5e63jmydqmttr3qorvopyyt40baytn.lambda-url.us-east-1.on.aws
  */
 
-const PROXY = 'https://ez5e63jmydqmttr3qorvopyyt40baytn.lambda-url.us-east-1.on.aws';
+import { PROXY, PROXY_HEADERS } from './proxy';
 
 async function shopifyFetch(endpoint, params = {}) {
   const url = new URL(`${PROXY}/shopify${endpoint}`);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { headers: PROXY_HEADERS });
   if (!res.ok) throw new Error(`Shopify API error: ${res.status}`);
   return res.json();
 }
