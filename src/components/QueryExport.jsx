@@ -1,13 +1,17 @@
 /**
  * QueryExport.jsx — browse & download all Ask Birch chat sessions within a
  * chosen date range. Nothing loads by default: the user picks From/To and
- * clicks Load, which fetches the existing /ai/queries proxy endpoint.
+ * clicks Load, which fetches the /ai/queries proxy endpoint.
  *
- * Caveat (frontend-only, no backend change): the worker caps the window at
- * 90 days and returns at most the 100 most-recent sessions. We derive `days`
- * from the From date (capped at 90), request limit=100, then filter the
- * `recent` list to [from, to] client-side. When the worker returns a full
- * 100 rows we warn that the export may be truncated.
+ * Pagination: the worker returns at most one 100-row page per request, ordered
+ * newest-first, with an `offset` param. "Load more" fetches the next page
+ * (offset += 100) and appends, so the user can page past the first 100 into
+ * older sessions. We keep pulling until the worker reports no more pages or
+ * the oldest returned row falls before the From date. The 90-day worker window
+ * is the only remaining hard limit.
+ *
+ * The accumulated rows are then paged 25-at-a-time client-side for display;
+ * Download CSV always exports the full accumulated set.
  */
 
 import React, { useState } from 'react';
@@ -15,7 +19,9 @@ import { PROXY, PROXY_HEADERS } from '../api/proxy';
 import { customerAdminUrl } from './ChatTranscriptModal';
 
 const MAX_DAYS = 90;
-const MAX_ROWS = 100;
+const BATCH = 100;      // rows per worker request (server cap)
+const PAGE_SIZE = 25;   // rows per client-side display page
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 // yyyy-mm-dd for <input type="date">
 function isoDate(d) {
@@ -25,7 +31,7 @@ function isoDate(d) {
 function defaultRange() {
   const to = new Date();
   const from = new Date();
-  from.setDate(from.getDate() - 30);
+  from.setDate(from.getDate() - 3);
   return { from: isoDate(from), to: isoDate(to) };
 }
 
@@ -34,6 +40,18 @@ function rangeBounds(fromStr, toStr) {
   const fromMs = new Date(`${fromStr}T00:00:00`).getTime();
   const toMs = new Date(`${toStr}T23:59:59.999`).getTime();
   return { fromMs, toMs };
+}
+
+// Merge a new batch into the accumulated rows, de-duping by session and
+// keeping the list sorted newest-first.
+function mergeRows(prev, next) {
+  const seen = new Set(prev.map((r) => r.sessionId));
+  const merged = prev.slice();
+  for (const r of next) {
+    if (!seen.has(r.sessionId)) { seen.add(r.sessionId); merged.push(r); }
+  }
+  merged.sort((a, b) => b.ts - a.ts);
+  return merged;
 }
 
 function csvCell(v) {
@@ -45,34 +63,71 @@ export function QueryExport({ onViewChat }) {
   const init = defaultRange();
   const [from, setFrom] = useState(init.from);
   const [to, setTo] = useState(init.to);
-  const [state, setState] = useState({ status: 'idle', rows: null, error: null, truncated: false });
+  const [state, setState] = useState({
+    status: 'idle',      // idle | loading | loaded | error
+    rows: null,
+    error: null,
+    hasMore: false,      // another server page exists within the range
+    nextOffset: 0,       // offset to request on the next "Load more"
+    capped: false,       // From date is older than the 90-day worker window
+    loadingMore: false,
+  });
+  const [page, setPage] = useState(0);
+
+  // Fetch one worker page at `offset`; returns rows filtered to [from, to]
+  // plus whether older in-range pages remain.
+  async function fetchBatch(offset) {
+    const { fromMs, toMs } = rangeBounds(from, to);
+    const daysBack = Math.ceil((Date.now() - fromMs) / DAY_MS);
+    const days = Math.min(MAX_DAYS, Math.max(1, daysBack));
+    const capped = daysBack > MAX_DAYS;
+
+    const res = await fetch(`${PROXY}/ai/queries?days=${days}&limit=${BATCH}&offset=${offset}`, { headers: PROXY_HEADERS });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const batch = data.recent || [];
+
+    const inRange = batch.filter((r) => r.ts != null && r.ts >= fromMs && r.ts <= toMs);
+    // batch is newest-first, so its last element is the oldest.
+    const oldestTs = batch.length ? batch[batch.length - 1].ts : null;
+    // Stop once we've paged older than From (all further rows are out of range).
+    const withinFrom = oldestTs == null || oldestTs >= fromMs;
+    const serverMore = data.hasMore != null ? data.hasMore : batch.length === BATCH;
+    return { inRange, hasMore: serverMore && withinFrom, capped };
+  }
 
   async function load() {
     if (!from || !to) return;
-    if (from > to) { setState({ status: 'error', rows: null, error: 'From date is after To date.', truncated: false }); return; }
-
-    setState({ status: 'loading', rows: null, error: null, truncated: false });
+    if (from > to) {
+      setState((s) => ({ ...s, status: 'error', rows: null, error: 'From date is after To date.' }));
+      return;
+    }
+    setPage(0);
+    setState({ status: 'loading', rows: null, error: null, hasMore: false, nextOffset: 0, capped: false, loadingMore: false });
     try {
-      const { fromMs, toMs } = rangeBounds(from, to);
-      // Worker window is relative to now; derive days from the From date.
-      const daysBack = Math.ceil((Date.now() - fromMs) / (24 * 60 * 60 * 1000));
-      const days = Math.min(MAX_DAYS, Math.max(1, daysBack));
-      const capped = daysBack > MAX_DAYS;
-
-      const res = await fetch(`${PROXY}/ai/queries?days=${days}&limit=${MAX_ROWS}`, { headers: PROXY_HEADERS });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const all = data.recent || [];
-
-      const rows = all
-        .filter((r) => r.ts != null && r.ts >= fromMs && r.ts <= toMs)
-        .sort((a, b) => b.ts - a.ts);
-
-      // If the worker returned the full cap, older sessions in-range may be missing.
-      const truncated = all.length >= MAX_ROWS || capped;
-      setState({ status: 'loaded', rows, error: null, truncated });
+      const { inRange, hasMore, capped } = await fetchBatch(0);
+      setState({ status: 'loaded', rows: inRange, error: null, hasMore, nextOffset: BATCH, capped, loadingMore: false });
     } catch (e) {
-      setState({ status: 'error', rows: null, error: e.message, truncated: false });
+      setState({ status: 'error', rows: null, error: e.message, hasMore: false, nextOffset: 0, capped: false, loadingMore: false });
+    }
+  }
+
+  async function loadMore() {
+    if (state.status !== 'loaded' || !state.hasMore || state.loadingMore) return;
+    const offset = state.nextOffset;
+    setState((s) => ({ ...s, loadingMore: true }));
+    try {
+      const { inRange, hasMore, capped } = await fetchBatch(offset);
+      setState((s) => ({
+        ...s,
+        rows: mergeRows(s.rows || [], inRange),
+        hasMore,
+        nextOffset: offset + BATCH,
+        capped: s.capped || capped,
+        loadingMore: false,
+      }));
+    } catch (e) {
+      setState((s) => ({ ...s, loadingMore: false, error: e.message }));
     }
   }
 
@@ -102,7 +157,12 @@ export function QueryExport({ onViewChat }) {
     URL.revokeObjectURL(url);
   }
 
-  const { status, rows, error, truncated } = state;
+  const { status, rows, error, hasMore, capped, loadingMore } = state;
+  const totalRows = rows?.length ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+  const curPage = Math.min(page, pageCount - 1);
+  const pageStart = curPage * PAGE_SIZE;
+  const pageRows = rows ? rows.slice(pageStart, pageStart + PAGE_SIZE) : [];
   const inputStyle = {
     fontFamily: 'inherit', fontSize: 11, color: '#3D3226', border: '0.5px solid #E0DDD6',
     borderRadius: 6, padding: '4px 7px', background: '#FFFFFF',
@@ -119,7 +179,7 @@ export function QueryExport({ onViewChat }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#3D3226' }}>Browse &amp; export</span>
         <span style={{ fontSize: 9, background: '#FBEEDC', color: '#8A5A1E', padding: '1px 7px', borderRadius: 99, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-          Max {MAX_ROWS} rows · 90 days
+          Last 90 days
         </span>
         <span style={{ fontSize: 10, color: '#8C8A85' }}>From</span>
         <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} style={inputStyle} />
@@ -131,18 +191,18 @@ export function QueryExport({ onViewChat }) {
         {status === 'loaded' && (
           <>
             <span style={{ fontSize: 10, background: '#F0EDE6', color: '#5F5E5A', padding: '1px 7px', borderRadius: 99, fontWeight: 600 }}>
-              {rows.length} {rows.length === 1 ? 'session' : 'sessions'}
+              {totalRows}{hasMore ? '+' : ''} {totalRows === 1 ? 'session' : 'sessions'} loaded
             </span>
-            <button onClick={downloadCsv} disabled={rows.length === 0} style={btnStyle(false)}>
+            <button onClick={downloadCsv} disabled={totalRows === 0} style={btnStyle(false)}>
               ⬇ Download CSV
             </button>
           </>
         )}
       </div>
 
-      {truncated && status === 'loaded' && (
+      {capped && status === 'loaded' && (
         <div style={{ fontSize: 10, color: '#B0483C', marginBottom: 8 }}>
-          Showing the 100 most-recent sessions (last 90 days max). Older sessions in this range may be omitted.
+          The worker only stores the last 90 days of chats — sessions in this range older than that can't be loaded.
         </div>
       )}
 
@@ -153,16 +213,16 @@ export function QueryExport({ onViewChat }) {
       {status === 'error' && (
         <div style={{ fontSize: 12, color: '#B0483C', padding: '4px 0' }}>Couldn't load queries ({error})</div>
       )}
-      {status === 'loaded' && rows.length === 0 && (
+      {status === 'loaded' && totalRows === 0 && (
         <div style={{ fontSize: 12, color: '#8C8A85', padding: '4px 0' }}>No chats in this date range.</div>
       )}
-      {status === 'loaded' && rows.length > 0 && (
+      {status === 'loaded' && totalRows > 0 && (
         <div style={{ maxHeight: 320, overflowY: 'auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 46px 70px 80px', gap: '0 8px', fontSize: 10 }}>
             {['Query', 'Date', 'Msgs', 'Customer', ''].map((h, i) => (
               <div key={i} style={{ position: 'sticky', top: 0, background: '#FFFFFF', fontWeight: 700, color: '#8C8A85', textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 5, borderBottom: '1px solid #E0DDD6' }}>{h}</div>
             ))}
-            {rows.map((r, i) => (
+            {pageRows.map((r, i) => (
               <React.Fragment key={r.sessionId || i}>
                 <div style={{ padding: '5px 0', borderBottom: '0.5px solid #F0EDE6', color: '#3D3226', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.query || ''}>
                   {r.query || '(no title)'}
@@ -191,6 +251,34 @@ export function QueryExport({ onViewChat }) {
           </div>
         </div>
       )}
+
+      {/* Pager + Load more */}
+      {status === 'loaded' && totalRows > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+          {totalRows > PAGE_SIZE && (
+            <>
+              <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={curPage === 0} style={pagerBtnStyle(curPage === 0)}>← Prev</button>
+              <span style={{ fontSize: 10, color: '#5F5E5A', fontFamily: 'DM Mono, monospace' }}>
+                {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, totalRows)} of {totalRows} · page {curPage + 1}/{pageCount}
+              </span>
+              <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={curPage >= pageCount - 1} style={pagerBtnStyle(curPage >= pageCount - 1)}>Next →</button>
+            </>
+          )}
+          {hasMore && (
+            <button onClick={loadMore} disabled={loadingMore} style={{ ...btnStyle(false), marginLeft: 'auto' }}>
+              {loadingMore ? 'Loading…' : `Load more (next ${BATCH})`}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+function pagerBtnStyle(disabled) {
+  return {
+    border: '0.5px solid #E0DDD6', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 600,
+    fontFamily: 'inherit', background: '#FFFFFF', color: disabled ? '#C4C1BA' : '#3D3226',
+    cursor: disabled ? 'default' : 'pointer',
+  };
 }

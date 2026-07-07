@@ -39,7 +39,8 @@ async function handleChatQueries(queryString) {
   const params = new URLSearchParams(queryString);
   const days = parseInt(params.get('days'), 10) || 7;
   const limit = parseInt(params.get('limit'), 10) || 25;
-  const result = await httpsGet(BIRCH_AI_HOST, `/internal/analytics/chats?days=${days}&limit=${limit}`, {
+  const offset = parseInt(params.get('offset'), 10) || 0;
+  const result = await httpsGet(BIRCH_AI_HOST, `/internal/analytics/chats?days=${days}&limit=${limit}&offset=${offset}`, {
     'Authorization': `Bearer ${secret}`,
   });
   if (result.status !== 200) return err(result.status, `Chat analytics error: ${JSON.stringify(result.body)}`);
