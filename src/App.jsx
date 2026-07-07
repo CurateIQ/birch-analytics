@@ -12,6 +12,7 @@ import { AIChat } from './components/AIChat';
 import { TodayStrip } from './components/TodayStrip';
 import { Sidebar } from './components/Sidebar';
 import { ChatTranscriptModal, customerAdminUrl } from './components/ChatTranscriptModal';
+import { QueryExport } from './components/QueryExport';
 
 const fmt = {
   usd:    v => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { minimumFractionDigits:0, maximumFractionDigits:0 })}`,
@@ -631,6 +632,9 @@ export default function App() {
                       </div>
                     )}
                   </div>
+
+                  {/* Browse & download all queries in a date range */}
+                  <QueryExport onViewChat={setChatSessionId} />
 
                 </div>
 
