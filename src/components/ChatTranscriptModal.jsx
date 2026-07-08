@@ -35,6 +35,42 @@ export function ChatTranscriptModal({ sessionId, onClose }) {
   const { loading, error, session, messages } = state;
   const custUrl = customerAdminUrl(session?.customer_id);
 
+  function downloadTranscript() {
+    if (!messages.length) return;
+    const dateStr = session?.last_message_at
+      ? new Date(session.last_message_at).toLocaleString('en-US',
+          { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })
+      : '';
+    const who = session?.customer_id ? `customer ${session.customer_id}` : 'guest';
+    const head = [
+      'Ask Birch — Chat transcript',
+      session?.intent_chip ? `Topic: ${session.intent_chip}` : null,
+      dateStr ? `Date: ${dateStr}` : null,
+      `Participant: ${who}`,
+      session?.message_count != null ? `Messages: ${session.message_count}` : null,
+      session?.was_escalated ? 'Escalated: yes' : null,
+      `Session ID: ${sessionId}`,
+      '',
+      '─'.repeat(48),
+      '',
+    ].filter((l) => l != null);
+    const body = messages.map((m) => {
+      const t = m.ts ? new Date(m.ts).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' }) : '';
+      const speaker = m.role === 'user' ? 'Customer' : 'Birch';
+      return `[${t}] ${speaker}:\n${m.content}\n`;
+    });
+    const text = head.concat(body).join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ask-birch-chat_${sessionId}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div
       onClick={onClose}
@@ -74,6 +110,15 @@ export function ChatTranscriptModal({ sessionId, onClose }) {
               )}
             </div>
           </div>
+          <button onClick={downloadTranscript} disabled={loading || messages.length === 0}
+            title="Download full conversation as a text file"
+            style={{ border:'none', borderRadius:8, padding:'0 10px', height:26, fontSize:11, fontWeight:600,
+                     fontFamily:'inherit', lineHeight:'26px', whiteSpace:'nowrap',
+                     background: messages.length ? '#3D3226' : '#F0EDE6',
+                     color: messages.length ? '#F7F5EF' : '#B8B5AE',
+                     cursor: messages.length ? 'pointer' : 'default' }}>
+            ⬇ Download
+          </button>
           <button onClick={onClose}
             style={{ border:'none', background:'#F0EDE6', color:'#5F5E5A', borderRadius:8,
                      width:26, height:26, fontSize:14, cursor:'pointer', lineHeight:1 }}>
