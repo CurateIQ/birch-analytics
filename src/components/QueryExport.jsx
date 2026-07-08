@@ -7,8 +7,12 @@
  * newest-first, with an `offset` param. "Load more" fetches the next page
  * (offset += 100) and appends, so the user can page past the first 100 into
  * older sessions. We keep pulling until the worker reports no more pages or
- * the oldest returned row falls before the From date. The 90-day worker window
- * is the only remaining hard limit.
+ * the oldest returned row falls before the From date.
+ *
+ * The only remaining limit is the analytics endpoint's 90-day query window —
+ * a cap on how far back THIS dashboard list looks, NOT data retention. Chats
+ * are kept indefinitely in D1 and any session stays viewable by id (via the
+ * "View chat" transcript), regardless of age.
  *
  * The accumulated rows are then paged 25-at-a-time client-side for display;
  * Download CSV always exports the full accumulated set.
@@ -178,9 +182,6 @@ export function QueryExport({ onViewChat }) {
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#3D3226' }}>Browse &amp; export</span>
-        <span style={{ fontSize: 9, background: '#FBEEDC', color: '#8A5A1E', padding: '1px 7px', borderRadius: 99, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-          Last 90 days
-        </span>
         <span style={{ fontSize: 10, color: '#8C8A85' }}>From</span>
         <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} style={inputStyle} />
         <span style={{ fontSize: 10, color: '#8C8A85' }}>To</span>
@@ -202,7 +203,7 @@ export function QueryExport({ onViewChat }) {
 
       {capped && status === 'loaded' && (
         <div style={{ fontSize: 10, color: '#B0483C', marginBottom: 8 }}>
-          The worker only stores the last 90 days of chats — sessions in this range older than that can't be loaded.
+          This list only reaches back 90 days, so chats before that won't appear here.
         </div>
       )}
 
