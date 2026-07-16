@@ -15,10 +15,16 @@
  * "View chat" transcript), regardless of age.
  *
  * The accumulated rows are then paged 25-at-a-time client-side for display;
- * Download CSV always exports the full accumulated set.
+ * Download CSV exports the full accumulated set, minus any excluded customers.
+ *
+ * Exclusions: the user can hide specific customers (e.g. staff/test accounts)
+ * by customer id. Excluded ids are applied client-side over the accumulated
+ * rows — they drop out of the table, the count, and the CSV — and persist to
+ * localStorage so the same accounts stay filtered across reloads. Guests (no
+ * customer id) can't be individually excluded.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PROXY, PROXY_HEADERS } from '../api/proxy';
 import { customerAdminUrl } from './ChatTranscriptModal';
 
@@ -26,6 +32,20 @@ const MAX_DAYS = 90;
 const BATCH = 100;      // rows per worker request (server cap)
 const PAGE_SIZE = 25;   // rows per client-side display page
 const DAY_MS = 24 * 60 * 60 * 1000;
+const EXCLUDE_KEY = 'birch:chatExcludedCustomers';
+
+// Excluded customer ids persisted across sessions.
+function loadExcluded() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(EXCLUDE_KEY) || '[]');
+    return Array.isArray(arr) ? arr.map(String) : [];
+  } catch { return []; }
+}
+
+// Split a free-text field into distinct customer ids (comma/space/newline sep).
+function parseIds(text) {
+  return text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+}
 
 // yyyy-mm-dd for <input type="date">
 function isoDate(d) {
@@ -77,6 +97,23 @@ export function QueryExport({ onViewChat }) {
     loadingMore: false,
   });
   const [page, setPage] = useState(0);
+  const [excluded, setExcluded] = useState(loadExcluded);
+  const [exInput, setExInput] = useState('');
+  const excludedSet = useMemo(() => new Set(excluded), [excluded]);
+
+  useEffect(() => {
+    try { localStorage.setItem(EXCLUDE_KEY, JSON.stringify(excluded)); } catch { /* ignore */ }
+  }, [excluded]);
+
+  function addExcluded(ids) {
+    const list = Array.isArray(ids) ? ids.map(String) : parseIds(String(ids));
+    if (!list.length) return;
+    setExcluded((prev) => Array.from(new Set([...prev, ...list])));
+    setPage(0);
+  }
+  function removeExcluded(id) {
+    setExcluded((prev) => prev.filter((x) => x !== String(id)));
+  }
 
   // Fetch one worker page at `offset`; returns rows filtered to [from, to]
   // plus whether older in-range pages remain.
@@ -136,7 +173,9 @@ export function QueryExport({ onViewChat }) {
   }
 
   function downloadCsv() {
-    const rows = state.rows || [];
+    const rows = (state.rows || []).filter(
+      (r) => !(r.customerId != null && excludedSet.has(String(r.customerId)))
+    );
     const header = ['date', 'query', 'messages', 'escalated', 'mode', 'customer_id', 'session_id'];
     const lines = [header.join(',')];
     for (const r of rows) {
@@ -162,11 +201,16 @@ export function QueryExport({ onViewChat }) {
   }
 
   const { status, rows, error, hasMore, capped, loadingMore } = state;
-  const totalRows = rows?.length ?? 0;
+  const allRows = rows || [];
+  const visibleRows = excludedSet.size
+    ? allRows.filter((r) => !(r.customerId != null && excludedSet.has(String(r.customerId))))
+    : allRows;
+  const totalRows = visibleRows.length;
+  const hiddenCount = allRows.length - totalRows;
   const pageCount = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
   const curPage = Math.min(page, pageCount - 1);
   const pageStart = curPage * PAGE_SIZE;
-  const pageRows = rows ? rows.slice(pageStart, pageStart + PAGE_SIZE) : [];
+  const pageRows = visibleRows.slice(pageStart, pageStart + PAGE_SIZE);
   const inputStyle = {
     fontFamily: 'inherit', fontSize: 11, color: '#3D3226', border: '0.5px solid #E0DDD6',
     borderRadius: 6, padding: '4px 7px', background: '#FFFFFF',
@@ -200,6 +244,37 @@ export function QueryExport({ onViewChat }) {
           </>
         )}
       </div>
+
+      {/* Customer exclusion filter */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: excluded.length ? 6 : 8 }}>
+        <span style={{ fontSize: 10, color: '#8C8A85', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Exclude customers</span>
+        <input
+          type="text"
+          value={exInput}
+          onChange={(e) => setExInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { addExcluded(exInput); setExInput(''); } }}
+          placeholder="Customer ID(s)…"
+          style={{ ...inputStyle, width: 150 }}
+        />
+        <button onClick={() => { addExcluded(exInput); setExInput(''); }} disabled={!exInput.trim()} style={btnStyle(false)}>Add</button>
+        {excluded.length > 0 && (
+          <button onClick={() => setExcluded([])} style={{ ...btnStyle(false), background: 'transparent', color: '#8C8A85' }}>Clear all</button>
+        )}
+        {hiddenCount > 0 && status === 'loaded' && (
+          <span style={{ fontSize: 10, color: '#8C8A85' }}>{hiddenCount} hidden</span>
+        )}
+      </div>
+
+      {excluded.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+          {excluded.map((id) => (
+            <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, background: '#F0EDE6', color: '#3D3226', borderRadius: 99, padding: '2px 4px 2px 9px', fontFamily: 'DM Mono, monospace' }}>
+              {id}
+              <button onClick={() => removeExcluded(id)} title="Stop excluding" style={{ border: 'none', background: '#E0DDD6', color: '#5F5E5A', borderRadius: 99, width: 14, height: 14, lineHeight: '14px', fontSize: 11, cursor: 'pointer', padding: 0 }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {capped && status === 'loaded' && (
         <div style={{ fontSize: 10, color: '#B0483C', marginBottom: 8 }}>
@@ -235,9 +310,12 @@ export function QueryExport({ onViewChat }) {
                 <div style={{ padding: '5px 0', borderBottom: '0.5px solid #F0EDE6', color: '#378ADD', fontWeight: 600, fontFamily: 'DM Mono, monospace', textAlign: 'right' }}>
                   {r.messageCount ?? ''}
                 </div>
-                <div style={{ padding: '5px 0', borderBottom: '0.5px solid #F0EDE6' }}>
+                <div style={{ padding: '5px 0', borderBottom: '0.5px solid #F0EDE6', display: 'flex', alignItems: 'center', gap: 4 }}>
                   {customerAdminUrl(r.customerId) ? (
-                    <a href={customerAdminUrl(r.customerId)} target="_blank" rel="noreferrer" style={{ color: '#378ADD', fontWeight: 600, textDecoration: 'none', fontSize: 10 }}>Customer ↗</a>
+                    <>
+                      <a href={customerAdminUrl(r.customerId)} target="_blank" rel="noreferrer" style={{ color: '#378ADD', fontWeight: 600, textDecoration: 'none', fontSize: 10 }}>Customer ↗</a>
+                      <button onClick={() => addExcluded(String(r.customerId))} title={`Exclude customer ${r.customerId}`} style={{ border: 'none', background: 'transparent', color: '#B8B5AE', cursor: 'pointer', fontSize: 11, padding: 0, lineHeight: 1 }}>×</button>
+                    </>
                   ) : (
                     <span style={{ fontSize: 10, color: '#8C8A85' }}>guest</span>
                   )}
