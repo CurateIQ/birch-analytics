@@ -238,8 +238,10 @@ export async function fetchDwellingItems() {
 }
 
 /**
- * Fetch fulfillments that shipped 5+ days ago and haven't been marked delivered.
- * One row per undelivered fulfillment line item.
+ * Fetch open orders 5+ days old where items haven't been delivered.
+ * Iterates order.line_items (source of truth); checks fulfillments only to
+ * determine carrier and whether a given item is already delivered.
+ * Orders with zero fulfillments are included — no tracking = worst case.
  * Returns: [{ orderId, orderName, title, brand, isFBB, carrier, destination, daysOld }]
  */
 export async function fetchLateDeliveries() {
@@ -263,23 +265,42 @@ export async function fetchLateDeliveries() {
     const dest = [order.shipping_address?.city, order.shipping_address?.province_code]
       .filter(Boolean).join(', ') || '—';
 
-    for (const fulfillment of (order.fulfillments || [])) {
-      if (fulfillment.shipment_status === 'delivered') continue;
-      if (fulfillment.status === 'cancelled') continue;
-      const carrier = fulfillment.tracking_company || '—';
-      for (const item of (fulfillment.line_items || [])) {
-        const isFBB = item.fulfillment_service === 'manual';
-        items.push({
-          orderId: order.id,
-          orderName: order.name || `#${order.id}`,
-          title: item.title,
-          brand: isFBB ? 'FBB' : (item.vendor || 'Unknown'),
-          isFBB,
-          carrier,
-          destination: dest,
-          daysOld,
-        });
+    const fulfillments = order.fulfillments || [];
+
+    // Build a set of line_item ids that are covered by a delivered fulfillment
+    const deliveredLineItemIds = new Set();
+    for (const f of fulfillments) {
+      if (f.shipment_status === 'delivered' && f.status !== 'cancelled') {
+        for (const fi of (f.line_items || [])) {
+          deliveredLineItemIds.add(fi.id);
+        }
       }
+    }
+
+    // Find the active (non-cancelled, non-delivered) fulfillment for carrier info
+    const activeFulfillment = fulfillments.find(
+      f => f.status !== 'cancelled' && f.shipment_status !== 'delivered'
+    );
+    const carrier = activeFulfillment?.tracking_company || (fulfillments.length === 0 ? 'No tracking' : '—');
+
+    // Iterate order line items — these are the authoritative list
+    for (const item of (order.line_items || [])) {
+      // Skip if already fully fulfilled and delivered
+      if (item.fulfillment_status === 'fulfilled' && deliveredLineItemIds.has(item.id)) continue;
+      // Skip if the item itself is marked fulfilled but we have no fulfillment record — shouldn't happen but guard it
+      if (item.fulfillment_status === 'fulfilled' && fulfillments.length === 0) continue;
+
+      const isFBB = item.fulfillment_service === 'manual';
+      items.push({
+        orderId: order.id,
+        orderName: order.name || `#${order.id}`,
+        title: item.title,
+        brand: isFBB ? 'FBB' : (item.vendor || 'Unknown'),
+        isFBB,
+        carrier,
+        destination: dest,
+        daysOld,
+      });
     }
   }
 
