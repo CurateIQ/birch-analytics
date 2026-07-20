@@ -306,3 +306,121 @@ export async function fetchLateDeliveries() {
 
   return items.sort((a, b) => b.daysOld - a.daysOld);
 }
+
+/**
+ * Compute per-brand GMV/sales and fulfillment metrics for a rolling window.
+ * Returns two arrays: curr (current window) and prev (prior window of same length),
+ * with change % attached to each curr row.
+ */
+async function fetchBrandHealth(days) {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const prevStart   = new Date(now.getTime() - 2 * days * 24 * 60 * 60 * 1000);
+
+  const [currData, prevData] = await Promise.all([
+    shopifyFetch('/orders', {
+      status: 'any',
+      created_at_min: windowStart.toISOString(),
+      created_at_max: now.toISOString(),
+      limit: 250,
+      fields: 'id,created_at,total_price,line_items,financial_status,cancel_reason,fulfillments',
+    }),
+    shopifyFetch('/orders', {
+      status: 'any',
+      created_at_min: prevStart.toISOString(),
+      created_at_max: windowStart.toISOString(),
+      limit: 250,
+      fields: 'id,created_at,total_price,line_items,financial_status,cancel_reason,fulfillments',
+    }),
+  ]);
+
+  function calcMetrics(orders) {
+    const brands = {};
+    function g(vendor) {
+      if (!brands[vendor]) brands[vendor] = { gmv:0, orderCount:0, refundCount:0, cancelCount:0, fulfillTimes:[], deliveryTimes:[], onTimeCount:0, totalFulfillments:0 };
+      return brands[vendor];
+    }
+
+    for (const order of orders) {
+      const isRefunded = order.financial_status === 'refunded' || order.financial_status === 'partially_refunded';
+      const isCancelled = !!order.cancel_reason;
+      const lineItems = order.line_items || [];
+
+      const vendorGMV = {};
+      const vendorSet = new Set();
+      for (const item of lineItems) {
+        const vendor = item.vendor || 'Unknown';
+        vendorSet.add(vendor);
+        vendorGMV[vendor] = (vendorGMV[vendor] || 0) + parseFloat(item.price || 0) * (item.quantity || 1);
+      }
+
+      for (const vendor of vendorSet) {
+        const b = g(vendor);
+        b.orderCount++;
+        b.gmv += vendorGMV[vendor] || 0;
+        if (isRefunded) b.refundCount++;
+        if (isCancelled) b.cancelCount++;
+      }
+
+      for (const f of (order.fulfillments || [])) {
+        if (f.status === 'cancelled') continue;
+        const fulfillHours = (new Date(f.created_at) - new Date(order.created_at)) / (1000 * 60 * 60);
+        const deliveryDays = f.shipment_status === 'delivered' && f.updated_at
+          ? (new Date(f.updated_at) - new Date(order.created_at)) / (1000 * 60 * 60 * 24)
+          : null;
+
+        for (const vendor of vendorSet) {
+          const b = g(vendor);
+          b.totalFulfillments++;
+          if (fulfillHours >= 0) {
+            b.fulfillTimes.push(fulfillHours);
+            if (fulfillHours < 24) b.onTimeCount++;
+          }
+          if (deliveryDays != null && deliveryDays >= 0 && deliveryDays < 90) {
+            b.deliveryTimes.push(deliveryDays);
+          }
+        }
+      }
+    }
+
+    return Object.fromEntries(
+      Object.entries(brands).map(([brand, b]) => {
+        const avgFulfillHours = b.fulfillTimes.length > 0 ? b.fulfillTimes.reduce((s,t)=>s+t,0)/b.fulfillTimes.length : null;
+        const avgDeliveryDays = b.deliveryTimes.length > 0 ? b.deliveryTimes.reduce((s,t)=>s+t,0)/b.deliveryTimes.length : null;
+        return [brand, {
+          brand,
+          gmv:          Math.round(b.gmv * 100) / 100,
+          orderCount:   b.orderCount,
+          aov:          b.orderCount > 0 ? Math.round((b.gmv / b.orderCount) * 100) / 100 : 0,
+          returnPct:    b.orderCount > 0 ? Math.round((b.refundCount / b.orderCount) * 1000) / 10 : 0,
+          cancelPct:    b.orderCount > 0 ? Math.round((b.cancelCount / b.orderCount) * 1000) / 10 : 0,
+          avgFulfillHours: avgFulfillHours != null ? Math.round(avgFulfillHours * 10) / 10 : null,
+          avgDeliveryDays: avgDeliveryDays != null ? Math.round(avgDeliveryDays * 10) / 10 : null,
+          onTimePct:    b.totalFulfillments > 0 ? Math.round((b.onTimeCount / b.totalFulfillments) * 100) : null,
+        }];
+      })
+    );
+  }
+
+  const curr = calcMetrics(currData.orders || []);
+  const prev = calcMetrics(prevData.orders || []);
+
+  const pct = (a, b) => b && b !== 0 ? Math.round(((a - b) / b) * 1000) / 10 : null;
+
+  return Object.values(curr)
+    .map(c => {
+      const p = prev[c.brand] || {};
+      return {
+        ...c,
+        gmvChange:        pct(c.gmv, p.gmv),
+        aovChange:        pct(c.aov, p.aov),
+        orderCountChange: pct(c.orderCount, p.orderCount),
+        returnPctChange:  p.returnPct != null ? Math.round((c.returnPct - p.returnPct) * 10) / 10 : null,
+        cancelPctChange:  p.cancelPct != null ? Math.round((c.cancelPct - p.cancelPct) * 10) / 10 : null,
+      };
+    })
+    .sort((a, b) => b.gmv - a.gmv);
+}
+
+export async function fetchBrandHealthWeekly()  { return fetchBrandHealth(7); }
+export async function fetchBrandHealthMonthly() { return fetchBrandHealth(30); }

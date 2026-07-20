@@ -9,14 +9,15 @@ const SECTIONS = [
   {
     group: 'Core Metrics',
     items: [
-      { id:'orders',      icon:'📦', name:'Orders & Transactions', sub:'GMV, AOV, returns, cart abandon',   status:'live' },
-      { id:'customers',   icon:'👥', name:'Customers',             sub:'MAU, WAU, new vs returning',         status:'live' },
-      { id:'operations',  icon:'⚙️', name:'Operations',            sub:'Dwelling orders, late deliveries',   status:'live' },
-      { id:'website',     icon:'🌐', name:'Website Traffic',       sub:'Sessions, channels, landing pages',  status:'live' },
-      { id:'growth',      icon:'📈', name:'Growth & Catalog',      sub:'GMV by brand, category trends',      status:'live' },
-      { id:'marketplace', icon:'🏪', name:'Marketplace & Supply',  sub:'Brands, SKUs, fulfillment',          status:'live' },
-      { id:'email',       icon:'✉️', name:'Email & CRM',           sub:'List size, open rate, click rate',   status:'live' },
-      { id:'askbirch',    icon:'💬', name:'Ask Birch Queries',     sub:'What customers are asking',          status:'live' },
+      { id:'orders',      icon:'📦', name:'Orders & Transactions', sub:'GMV, AOV, returns, cart abandon',      status:'live' },
+      { id:'customers',   icon:'👥', name:'Customers',             sub:'MAU, WAU, new vs returning',            status:'live' },
+      { id:'operations',  icon:'⚙️', name:'Operations',            sub:'Dwelling orders, late deliveries',      status:'live' },
+      { id:'website',     icon:'🌐', name:'Website Traffic',       sub:'Sessions, channels, landing pages',     status:'live' },
+      { id:'growth',      icon:'📈', name:'Growth & Catalog',      sub:'GMV by brand, category trends',         status:'live' },
+      { id:'marketplace', icon:'🏪', name:'Marketplace & Supply',  sub:'Brands, SKUs, fulfillment',             status:'live' },
+      { id:'brands',      icon:'🏷️', name:'Brand Health',          sub:'Per-brand GMV, fulfillment, on-time %', status:'live' },
+      { id:'email',       icon:'✉️', name:'Email & CRM',           sub:'List size, open rate, click rate',      status:'live' },
+      { id:'askbirch',    icon:'💬', name:'Ask Birch Queries',     sub:'What customers are asking',             status:'live' },
     ],
   },
   {
@@ -24,7 +25,6 @@ const SECTIONS = [
     items: [
       { id:'revenue',    icon:'💰', name:'Revenue & Unit Economics', sub:'Take rate, margin, burn, runway',  status:'soon' },
       { id:'marketing',  icon:'📣', name:'Marketing',               sub:'CAC, paid, organic, influencer',    status:'soon' },
-      { id:'brands',     icon:'🏷️', name:'Brand Health',           sub:'Per-brand orders, returns, SLA',    status:'soon' },
       { id:'finance',    icon:'🧾', name:'Finance & Tax',          sub:'Net revenue, tax, compliance',       status:'soon' },
     ],
   },

@@ -4,7 +4,7 @@
  * bold headers, metric definitions, ET timezone.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useDashboardData } from './hooks/useDashboardData';
 import { KPICard } from './components/KPICard';
@@ -13,6 +13,7 @@ import { TodayStrip } from './components/TodayStrip';
 import { Sidebar } from './components/Sidebar';
 import { ChatTranscriptModal, customerAdminUrl } from './components/ChatTranscriptModal';
 import { QueryExport } from './components/QueryExport';
+import { fetchBrandHealthWeekly, fetchBrandHealthMonthly } from './api/shopify';
 
 const fmt = {
   usd:    v => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { minimumFractionDigits:0, maximumFractionDigits:0 })}`,
@@ -143,10 +144,206 @@ const CustomTooltip = ({ active, payload, label, prefix='' }) => {
   );
 };
 
+function fmtFulfillTime(hours) {
+  if (hours == null) return '—';
+  if (hours < 48) return `${Math.round(hours)}h`;
+  return `${(hours / 24).toFixed(1)}d`;
+}
+
+function ChangeIndicator({ value, invert = false, suffix = '%' }) {
+  if (value == null) return <span style={{ fontSize:9, color:'#C8BFB0', display:'block', marginTop:1 }}>—</span>;
+  const pos = value > 0;
+  const neg = value < 0;
+  const color = invert
+    ? (pos ? '#A32D2D' : neg ? '#5A7A5C' : '#C8BFB0')
+    : (pos ? '#5A7A5C' : neg ? '#A32D2D' : '#C8BFB0');
+  return (
+    <span style={{ fontSize:9, color, display:'block', marginTop:1, lineHeight:1.2 }}>
+      {pos ? '↑' : neg ? '↓' : '—'} {Math.abs(value)}{suffix}
+    </span>
+  );
+}
+
+function OnTimeBadge({ pct }) {
+  if (pct == null) return <span style={{ color:'#C8BFB0' }}>—</span>;
+  const color = pct >= 85 ? '#5A7A5C' : pct >= 70 ? '#854F0B' : '#A32D2D';
+  const bg    = pct >= 85 ? 'rgba(90,122,92,0.1)' : pct >= 70 ? 'rgba(133,79,11,0.1)' : 'rgba(163,45,45,0.1)';
+  return (
+    <span style={{ background:bg, color, fontWeight:600, borderRadius:4, padding:'1px 5px', fontSize:10 }}>
+      {pct}%
+    </span>
+  );
+}
+
+const BH_CARD = { background:'#FFFFFF', border:'0.5px solid #E0DDD6', borderRadius:12, padding:'14px', overflow:'hidden', minWidth:0 };
+const BH_HEAD = { fontSize:10, fontWeight:700, color:'#8C8A85', textTransform:'uppercase', letterSpacing:'0.07em', paddingBottom:6, borderBottom:'1px solid #E0DDD6', whiteSpace:'nowrap' };
+const BH_CELL = { padding:'5px 0', borderBottom:'0.5px solid #F0EDE6', verticalAlign:'top' };
+
+function BrandSalesTable({ title, rows, changeLabel }) {
+  if (!rows?.length) return (
+    <div style={BH_CARD}>
+      <div style={{ fontSize:12, fontWeight:600, color:'#3D3226', marginBottom:10 }}>{title}</div>
+      <div style={{ fontSize:12, color:'#8C8A85' }}>No data</div>
+    </div>
+  );
+  return (
+    <div style={BH_CARD}>
+      <div style={{ fontSize:12, fontWeight:600, color:'#3D3226', marginBottom:10 }}>{title}</div>
+      <div style={{ overflowX:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10, tableLayout:'auto' }}>
+          <thead>
+            <tr>
+              {['Brand','GMV','AOV','Orders','Return %','Cancel %'].map(h => (
+                <th key={h} style={{ ...BH_HEAD, textAlign: h === 'Brand' ? 'left' : 'right', paddingRight: h !== 'Brand' ? 8 : 0 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td style={{ ...BH_CELL, color:'#3D3226', fontWeight:500, paddingRight:8, maxWidth:110, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={r.brand}>{r.brand}</td>
+                <td style={{ ...BH_CELL, textAlign:'right', paddingRight:8, fontFamily:'DM Mono, monospace' }}>
+                  ${r.gmv.toLocaleString('en-US', { minimumFractionDigits:0, maximumFractionDigits:0 })}
+                  <ChangeIndicator value={r.gmvChange} suffix="%" />
+                </td>
+                <td style={{ ...BH_CELL, textAlign:'right', paddingRight:8, fontFamily:'DM Mono, monospace' }}>
+                  ${r.aov.toFixed(0)}
+                  <ChangeIndicator value={r.aovChange} suffix="%" />
+                </td>
+                <td style={{ ...BH_CELL, textAlign:'right', paddingRight:8, fontFamily:'DM Mono, monospace' }}>
+                  {r.orderCount}
+                  <ChangeIndicator value={r.orderCountChange} suffix="%" />
+                </td>
+                <td style={{ ...BH_CELL, textAlign:'right', paddingRight:8, fontFamily:'DM Mono, monospace' }}>
+                  {r.returnPct}%
+                  <ChangeIndicator value={r.returnPctChange} invert suffix="pp" />
+                </td>
+                <td style={{ ...BH_CELL, textAlign:'right', fontFamily:'DM Mono, monospace' }}>
+                  {r.cancelPct}%
+                  <ChangeIndicator value={r.cancelPctChange} invert suffix="pp" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize:9, color:'#C8BFB0', marginTop:6 }}>{changeLabel} change shown below each value</div>
+    </div>
+  );
+}
+
+function BrandFulfillTable({ title, rows }) {
+  if (!rows?.length) return (
+    <div style={BH_CARD}>
+      <div style={{ fontSize:12, fontWeight:600, color:'#3D3226', marginBottom:10 }}>{title}</div>
+      <div style={{ fontSize:12, color:'#8C8A85' }}>No data</div>
+    </div>
+  );
+  return (
+    <div style={BH_CARD}>
+      <div style={{ fontSize:12, fontWeight:600, color:'#3D3226', marginBottom:10 }}>{title}</div>
+      <div style={{ overflowX:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10, tableLayout:'auto' }}>
+          <thead>
+            <tr>
+              {['Brand','Avg fulfill time','Avg delivery time','On-time fulfill %'].map(h => (
+                <th key={h} style={{ ...BH_HEAD, textAlign: h === 'Brand' ? 'left' : 'right', paddingRight: h !== 'Brand' ? 8 : 0 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td style={{ ...BH_CELL, color:'#3D3226', fontWeight:500, paddingRight:8, maxWidth:110, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={r.brand}>{r.brand}</td>
+                <td style={{ ...BH_CELL, textAlign:'right', paddingRight:8, fontFamily:'DM Mono, monospace' }}>{fmtFulfillTime(r.avgFulfillHours)}</td>
+                <td style={{ ...BH_CELL, textAlign:'right', paddingRight:8, fontFamily:'DM Mono, monospace' }}>{r.avgDeliveryDays != null ? `${r.avgDeliveryDays}d` : '—'}</td>
+                <td style={{ ...BH_CELL, textAlign:'right' }}><OnTimeBadge pct={r.onTimePct} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize:9, color:'#C8BFB0', marginTop:6 }}>On-time = fulfilled within 24h of order. Green ≥85%, amber 70–85%, red &lt;70%</div>
+    </div>
+  );
+}
+
+function BrandHealthPage({ onBack }) {
+  const [weekly,  setWeekly]  = useState(null);
+  const [monthly, setMonthly] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([fetchBrandHealthWeekly(), fetchBrandHealthMonthly()])
+      .then(([w, m]) => { setWeekly(w); setMonthly(m); })
+      .catch(e => setError(e.message || 'Failed to load brand data'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div>
+      {/* Page header */}
+      <div style={{ display:'flex', alignItems:'center', gap:10, margin:'16px 0 18px' }}>
+        <button onClick={onBack} style={{ background:'#F0EDE6', border:'0.5px solid #E0DDD6', borderRadius:7, padding:'4px 10px', fontSize:11, color:'#3D3226', cursor:'pointer', fontFamily:'DM Sans, sans-serif' }}>
+          ← Dashboard
+        </button>
+        <div style={{ fontSize:15, fontWeight:700, color:'#3D3226', letterSpacing:'0.02em' }}>Brand Health</div>
+      </div>
+
+      {loading && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:200, color:'#8C8A85', fontSize:13 }}>
+          Loading brand data from Shopify…
+        </div>
+      )}
+
+      {error && (
+        <div style={{ padding:'12px 14px', background:'#FCEBEB', border:'0.5px solid #E24B4A', borderRadius:8, fontSize:13, color:'#A32D2D', marginBottom:16 }}>
+          ⚠ {error}
+        </div>
+      )}
+
+      {!loading && !error && (
+        <>
+          {/* Row 1 — GMV & Sales */}
+          <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.08em', color:'#8C8A85', textTransform:'uppercase', marginBottom:8 }}>GMV & Sales Performance</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20 }}>
+            <BrandSalesTable
+              title="Rolling 7 days (last 7 days)"
+              rows={weekly}
+              changeLabel="WoW"
+            />
+            <BrandSalesTable
+              title="Rolling 30 days (last 30 days)"
+              rows={monthly}
+              changeLabel="MoM"
+            />
+          </div>
+
+          {/* Row 2 — Fulfillment & Delivery */}
+          <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.08em', color:'#8C8A85', textTransform:'uppercase', marginBottom:8 }}>Fulfillment & Delivery Performance</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:40 }}>
+            <BrandFulfillTable
+              title="Rolling 7 days (last 7 days)"
+              rows={weekly}
+            />
+            <BrandFulfillTable
+              title="Rolling 30 days (last 30 days)"
+              rows={monthly}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const { data, loading, error, lastUpdated, refresh } = useDashboardData();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [activeSection, setActiveSection] = useState('orders');
+  const [currentView, setCurrentView]   = useState('dashboard');
   const [chatSessionId, setChatSessionId] = useState(null);
   const metricsRef = useRef(null);
 
@@ -155,7 +352,12 @@ export default function App() {
 
   const handleSidebarClose = (sectionId) => {
     setSidebarOpen(false);
-    if (sectionId) {
+    if (sectionId === 'brands') {
+      setCurrentView('brands');
+      setActiveSection('brands');
+      if (metricsRef.current) metricsRef.current.scrollTop = 0;
+    } else if (sectionId) {
+      setCurrentView('dashboard');
       setActiveSection(sectionId);
       setTimeout(() => {
         const el = document.getElementById(`sec-${sectionId}`);
@@ -246,7 +448,11 @@ export default function App() {
               </div>
             )}
 
-            {data && (
+            {currentView === 'brands' && (
+              <BrandHealthPage onBack={() => { setCurrentView('dashboard'); setActiveSection('orders'); }} />
+            )}
+
+            {data && currentView === 'dashboard' && (
               <>
                 {/* #1 Orders */}
                 <SectionLabel id="sec-orders">Orders & Transactions</SectionLabel>
@@ -335,7 +541,7 @@ export default function App() {
                   {/* Late deliveries table */}
                   <div style={{ background:'#FFFFFF', border:'0.5px solid #E0DDD6', borderRadius:10, padding:'12px 14px', overflow:'hidden' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10 }}>
-                      <span style={{ fontSize:12, fontWeight:600, color:'#3D3226' }}>Late deliveries</span>
+                      <span style={{ fontSize:12, fontWeight:600, color:'#3D3226' }}>Late deliveries (beyond 5 days)</span>
                       <span style={{ fontSize:10, background:'#F0EDE6', color:'#5F5E5A', padding:'1px 7px', borderRadius:99, fontWeight:600 }}>
                         {(data.operations?.late?.length || 0)} items
                       </span>
