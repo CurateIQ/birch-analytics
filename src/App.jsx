@@ -246,7 +246,7 @@ function BrandFulfillTable({ title, rows }) {
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10, tableLayout:'auto' }}>
           <thead>
             <tr>
-              {['Brand','Avg fulfill time','Avg delivery time','On-time fulfill %'].map(h => (
+              {['Brand','Orders','Avg fulfill time','Avg delivery time','On-time fulfill %'].map(h => (
                 <th key={h} style={{ ...BH_HEAD, textAlign: h === 'Brand' ? 'left' : 'right', paddingRight: h !== 'Brand' ? 8 : 0 }}>{h}</th>
               ))}
             </tr>
@@ -255,6 +255,7 @@ function BrandFulfillTable({ title, rows }) {
             {rows.map((r, i) => (
               <tr key={i}>
                 <td style={{ ...BH_CELL, color:'#3D3226', fontWeight:500, paddingRight:8, maxWidth:110, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={r.brand}>{r.brand}</td>
+                <td style={{ ...BH_CELL, textAlign:'right', paddingRight:8, fontFamily:'DM Mono, monospace' }}>{r.orderCount}</td>
                 <td style={{ ...BH_CELL, textAlign:'right', paddingRight:8, fontFamily:'DM Mono, monospace' }}>{fmtFulfillTime(r.avgFulfillHours)}</td>
                 <td style={{ ...BH_CELL, textAlign:'right', paddingRight:8, fontFamily:'DM Mono, monospace' }}>{r.avgDeliveryDays != null ? `${r.avgDeliveryDays}d` : '—'}</td>
                 <td style={{ ...BH_CELL, textAlign:'right' }}><OnTimeBadge pct={r.onTimePct} /></td>
@@ -310,12 +311,12 @@ function BrandHealthPage({ onBack }) {
           <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.08em', color:'#8C8A85', textTransform:'uppercase', marginBottom:8 }}>GMV & Sales Performance</div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20 }}>
             <BrandSalesTable
-              title="Rolling 7 days (last 7 days)"
+              title="Rolling 7 days"
               rows={weekly}
               changeLabel="WoW"
             />
             <BrandSalesTable
-              title="Rolling 30 days (last 30 days)"
+              title="Rolling 30 days"
               rows={monthly}
               changeLabel="MoM"
             />
@@ -325,11 +326,11 @@ function BrandHealthPage({ onBack }) {
           <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.08em', color:'#8C8A85', textTransform:'uppercase', marginBottom:8 }}>Fulfillment & Delivery Performance</div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:40 }}>
             <BrandFulfillTable
-              title="Rolling 7 days (last 7 days)"
+              title="Rolling 7 days"
               rows={weekly}
             />
             <BrandFulfillTable
-              title="Rolling 30 days (last 30 days)"
+              title="Rolling 30 days"
               rows={monthly}
             />
           </div>
