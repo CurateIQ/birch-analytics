@@ -269,6 +269,68 @@ function BrandFulfillTable({ title, rows }) {
   );
 }
 
+const CAT_COLORS = {
+  'Clothes':'#C8763A','Toys':'#5A7A5C','Feeding':'#378ADD',
+  'Bath & Body':'#7A5C8A','Nursery':'#3A8A8A',
+  'Pacifiers & Teethers':'#854F0B','Diapering':'#5F8AC8',
+  'Transport':'#8A7A3A','Maternity':'#8A4A5A','Other':'#C8BFB0',
+};
+
+function HBarChart({ data, valueKey, labelKey, color, fmtValue }) {
+  if (!data?.length) return null;
+  const max = Math.max(...data.map(d => d[valueKey]), 1);
+  return (
+    <div>
+      {data.map((d, i) => (
+        <div key={i} style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}>
+          <div style={{ width:100, fontSize:9, color:'#5F5E5A', textAlign:'right', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flexShrink:0 }} title={d[labelKey]}>{d[labelKey]}</div>
+          <div style={{ flex:1, height:13, background:'rgba(0,0,0,0.05)', borderRadius:'0 3px 3px 0', position:'relative', overflow:'hidden' }}>
+            <div style={{ position:'absolute', top:0, left:0, height:'100%', width:`${(d[valueKey]/max)*100}%`, background:color, borderRadius:'0 3px 3px 0' }} />
+          </div>
+          <div style={{ fontSize:9, color:'#8C8A85', width:38, textAlign:'left', flexShrink:0, fontVariantNumeric:'tabular-nums' }}>{fmtValue(d[valueKey])}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CatalogByCategoryCard({ data }) {
+  if (!data?.length) return null;
+  const total = data.reduce((s, r) => s + r.skus, 0);
+  const maxSkus = Math.max(...data.map(d => d.skus), 1);
+  return (
+    <div style={{ background:'#FFFFFF', border:'0.5px solid #E0DDD6', borderRadius:10, padding:'12px 14px', height:'100%' }}>
+      <div style={{ fontSize:12, fontWeight:600, color:'#3D3226', marginBottom:10 }}>Catalog by category</div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 40px 40px 68px', gap:'0 6px', fontSize:10 }}>
+        {['Category','Brands','SKUs','Share'].map((h, i) => (
+          <div key={h} style={{ fontWeight:700, color:'#8C8A85', textTransform:'uppercase', letterSpacing:'0.06em', paddingBottom:6, borderBottom:'1px solid #E0DDD6', textAlign: i === 0 ? 'left' : 'right' }}>{h}</div>
+        ))}
+        {data.map((row, i) => {
+          const color = CAT_COLORS[row.category] || '#C8BFB0';
+          const pct = total > 0 ? Math.round((row.skus / total) * 100) : 0;
+          const barW = Math.round((row.skus / maxSkus) * 100);
+          return (
+            <React.Fragment key={i}>
+              <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', display:'flex', alignItems:'center', gap:5 }}>
+                <span style={{ width:7, height:7, borderRadius:'50%', background:color, display:'inline-block', flexShrink:0 }} />
+                <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{row.category}</span>
+              </div>
+              <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', textAlign:'right', fontFamily:'DM Mono, monospace' }}>{row.brands}</div>
+              <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', textAlign:'right', fontFamily:'DM Mono, monospace' }}>{row.skus}</div>
+              <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', display:'flex', alignItems:'center', gap:4 }}>
+                <div style={{ flex:1, height:5, background:'#F0EDE6', borderRadius:99, overflow:'hidden' }}>
+                  <div style={{ height:'100%', width:`${barW}%`, background:color, opacity:0.7, borderRadius:99 }} />
+                </div>
+                <span style={{ fontSize:9, color:'#8C8A85', width:26, textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{pct}%</span>
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function BrandHealthPage({ onBack }) {
   const [weekly,  setWeekly]  = useState(null);
   const [monthly, setMonthly] = useState(null);
@@ -740,36 +802,65 @@ export default function App() {
                 <SectionLabel id="sec-growth">Growth & Catalog</SectionLabel>
                 <div className="chart-row">
                   <ChartCard title="GMV by brand (week)">
-                    <ResponsiveContainer width="100%" height={150}>
-                      <BarChart data={(data.orders.gmvByBrand||[]).slice(0,6)} margin={{top:0,right:4,bottom:0,left:0}} layout="vertical">
-                        <XAxis type="number" tick={{fontSize:9,fill:'#8C8A85'}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(0)}k`} />
-                        <YAxis type="category" dataKey="brand" tick={{fontSize:9,fill:'#5F5E5A'}} axisLine={false} tickLine={false} width={70} />
-                        <Tooltip content={<CustomTooltip prefix="$" />} />
-                        <Bar dataKey="gmv" fill="#5A7A5C" radius={[0,3,3,0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <HBarChart
+                      data={(data.orders.gmvByBrand||[]).slice(0,10)}
+                      valueKey="gmv" labelKey="brand" color="#5A7A5C"
+                      fmtValue={v => v >= 1000 ? `$${(v/1000).toFixed(1)}k` : `$${v}`}
+                    />
                   </ChartCard>
                   <ChartCard title="GMV by category (week)">
-                    <ResponsiveContainer width="100%" height={150}>
-                      <BarChart data={(data.orders.gmvByCategory||[]).slice(0,6)} margin={{top:0,right:4,bottom:0,left:0}} layout="vertical">
-                        <XAxis type="number" tick={{fontSize:9,fill:'#8C8A85'}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(0)}k`} />
-                        <YAxis type="category" dataKey="category" tick={{fontSize:9,fill:'#5F5E5A'}} axisLine={false} tickLine={false} width={70} />
-                        <Tooltip content={<CustomTooltip prefix="$" />} />
-                        <Bar dataKey="gmv" fill="#378ADD" radius={[0,3,3,0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <HBarChart
+                      data={(data.orders.gmvByCategory||[]).slice(0,9)}
+                      valueKey="gmv" labelKey="category" color="#378ADD"
+                      fmtValue={v => v >= 1000 ? `$${(v/1000).toFixed(1)}k` : `$${v}`}
+                    />
                   </ChartCard>
                 </div>
+
+                {/* Orders by brand */}
+                <ChartCard title="Orders by brand (week)" style={{ marginTop:10 }}>
+                  {(() => {
+                    const brands = (data.orders.gmvByBrand||[]).slice(0,12);
+                    const totalOrd = brands.reduce((s,b)=>s+(b.orderCount||0),0);
+                    const maxOrd   = Math.max(...brands.map(b=>b.orderCount||0), 1);
+                    return (
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 44px 1fr 36px', gap:'0 8px', fontSize:10 }}>
+                        {['Brand','Orders','','%'].map((h,i) => (
+                          <div key={i} style={{ fontWeight:700, color:'#8C8A85', textTransform:'uppercase', letterSpacing:'0.06em', paddingBottom:6, borderBottom:'1px solid #E0DDD6', textAlign: i===0?'left':'right' }}>{h}</div>
+                        ))}
+                        {brands.map((b, i) => {
+                          const pct  = totalOrd > 0 ? Math.round(((b.orderCount||0)/totalOrd)*100) : 0;
+                          const barW = Math.round(((b.orderCount||0)/maxOrd)*100);
+                          return (
+                            <React.Fragment key={i}>
+                              <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'#3D3226', fontWeight:500 }} title={b.brand}>{b.brand}</div>
+                              <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', textAlign:'right', fontFamily:'DM Mono, monospace' }}>{b.orderCount||0}</div>
+                              <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', display:'flex', alignItems:'center', paddingRight:4 }}>
+                                <div style={{ flex:1, height:5, background:'#F0EDE6', borderRadius:99, overflow:'hidden' }}>
+                                  <div style={{ height:'100%', width:`${barW}%`, background:'#378ADD', opacity:0.6, borderRadius:99 }} />
+                                </div>
+                              </div>
+                              <div style={{ padding:'4px 0', borderBottom:'0.5px solid #F0EDE6', textAlign:'right', color:'#8C8A85', fontSize:9 }}>{pct}%</div>
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </ChartCard>
                 {/* #4 Marketplace */}
                 <SectionLabel id="sec-marketplace">Marketplace & Supply</SectionLabel>
-                <div className="kpi-grid">
-                  <KPICard label="Total brands live"       value={fmt.num(data.marketplace.totalBrands)}       change={null} changeLabel={`+${data.marketplace.newBrandsThisWeek} this week`} definition={DEFS.totalBrands} />
-                  <KPICard label="Total SKUs live"         value={fmt.num(data.marketplace.totalSKUs)}         change={null} definition={DEFS.totalSKUs} />
-                  <KPICard label="New brands (week)"       value={fmt.num(data.marketplace.newBrandsThisWeek)} change={null} definition={DEFS.newBrands} />
-                  <KPICard label="Top 5 brand concentration" value={fmt.pct(data.marketplace.brandConcentration)} change={null} definition={DEFS.concentration}
-                    drillTitle="Brand GMV breakdown" drillData={(data.marketplace.gmvByBrand||[]).slice(0,8).map(b=>({label:b.brand,value:b.gmv,formatted:fmt.usd(b.gmv)}))} />
-                  <KPICard label="Avg fulfillment time"    value={fmt.days(data.marketplace.avgFulfillmentDays)} change={null} definition={DEFS.fulfillment} />
-                  <KPICard label="Overall return rate"     value={fmt.pct(data.marketplace.overallReturnRate)}  change={null} definition={DEFS.overallReturn} />
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, alignItems:'start' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                    <KPICard label="Total brands live"       value={fmt.num(data.marketplace.totalBrands)}       change={null} changeLabel={`+${data.marketplace.newBrandsThisWeek} this week`} definition={DEFS.totalBrands} />
+                    <KPICard label="Total SKUs live"         value={fmt.num(data.marketplace.totalSKUs)}         change={null} definition={DEFS.totalSKUs} />
+                    <KPICard label="New brands (week)"       value={fmt.num(data.marketplace.newBrandsThisWeek)} change={null} definition={DEFS.newBrands} />
+                    <KPICard label="Top 5 brand concentration" value={fmt.pct(data.marketplace.brandConcentration)} change={null} definition={DEFS.concentration}
+                      drillTitle="Brand GMV breakdown" drillData={(data.marketplace.gmvByBrand||[]).slice(0,8).map(b=>({label:b.brand,value:b.gmv,formatted:fmt.usd(b.gmv)}))} />
+                    <KPICard label="Avg fulfillment time"    value={fmt.days(data.marketplace.avgFulfillmentDays)} change={null} definition={DEFS.fulfillment} />
+                    <KPICard label="Overall return rate"     value={fmt.pct(data.marketplace.overallReturnRate)}  change={null} definition={DEFS.overallReturn} />
+                  </div>
+                  <CatalogByCategoryCard data={data.marketplace.catalogByCategory} />
                 </div>
 
                 {/* Ask Birch Queries */}

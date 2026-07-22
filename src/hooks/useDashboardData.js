@@ -15,7 +15,7 @@ import {
   calcOrderMetrics, calcDailyGMV, calcGMVByBrand,
   calcGMVByCategory, calcBrandConcentration,
   calcCatalogMetrics, calcNewBrands, calcCustomerMetrics,
-  calcWoWChange,
+  calcCatalogByCategory, calcWoWChange,
 } from '../api/shopify';
 import { fetchListMetrics } from '../api/klaviyo';
 import { PROXY, PROXY_HEADERS } from '../api/proxy';
@@ -155,9 +155,10 @@ export function useDashboardData() {
       const dailyGMV      = calcDailyGMV(twOrders, 14);
       const gmvByBrand    = calcGMVByBrand(wOrders);
       const gmvByCategory = calcGMVByCategory(wOrders);
-      const catalogM      = calcCatalogMetrics(prods);
-      const newBrands     = calcNewBrands(prods, prods);
-      const brandConc     = calcBrandConcentration(gmvByBrand);
+      const catalogM         = calcCatalogMetrics(prods);
+      const newBrands        = calcNewBrands(prods, prods);
+      const brandConc        = calcBrandConcentration(gmvByBrand);
+      const catalogByCategory = calcCatalogByCategory(prods);
       const custM         = calcCustomerMetrics(wCusts, wOrders);
 
       // MAU — unique buyers in last 30 days
@@ -207,13 +208,14 @@ export function useDashboardData() {
           conversionRate:   null,
         },
         marketplace: {
-          totalBrands:       catalogM.totalBrands,
-          totalSKUs:         catalogM.totalSKUs,
-          newBrandsThisWeek: newBrands,
+          totalBrands:        catalogM.totalBrands,
+          totalSKUs:          catalogM.totalSKUs,
+          newBrandsThisWeek:  newBrands,
           brandConcentration: brandConc,
           avgFulfillmentDays: fulfill.avgFulfillmentDays,
-          overallReturnRate: refunds.returnRate,
+          overallReturnRate:  refunds.returnRate,
           gmvByBrand,
+          catalogByCategory,
         },
         operations: {
           dwelling,

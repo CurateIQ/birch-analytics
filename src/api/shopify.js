@@ -74,19 +74,58 @@ export function calcDailyGMV(orders, days = 14) {
   return Object.entries(map).map(([date, gmv]) => ({ date: date.slice(5), gmv: Math.round(gmv) }));
 }
 
+// Maps Shopify product_type values to the 9 website-facing categories on birchstore.com.
+// Falls back to title keyword matching for products with blank product_type.
+const CATEGORY_MAP = {
+  'Baby Bibs':'Feeding','Bibs':'Feeding','Feeding Utensils & Tableware':'Feeding','Placemat':'Feeding',
+  'Blanket':'Clothes','Bloomers':'Clothes','Dress':'Clothes','Footie':'Clothes',
+  'Footie & Rattle Set':'Clothes','One-piece':'Clothes','Overalls':'Clothes','Pajamas':'Clothes',
+  'Pants':'Clothes','Romper':'Clothes','Short Sleeve Shirt':'Clothes','Sleep Gown':'Clothes',
+  'Swaddles':'Clothes','Tops':'Clothes','Bundle':'Clothes',
+  'Activity Toy':'Toys','Baby Toys':'Toys','Book':'Toys','Crinkle Blankie':'Toys',
+  'Doll':'Toys','Doll Accessory':'Toys','Dolls':'Toys','Lovey':'Toys',
+  'Plush':'Toys','Rattle':'Toys','Stroller Toy':'Toys',
+  'Teethers':'Pacifiers & Teethers','Pacifier Buddy':'Pacifiers & Teethers',
+  'Disposable Baby Diapers':'Diapering','Baby Wipes':'Diapering',
+  'Baby Carrier':'Transport',
+  'Baby Haircare':'Bath & Body','Baby Lotion':'Bath & Body',
+  'Bath & Body Set':'Bath & Body','Sunscreen':'Bath & Body',
+  'Bassinet Canopy Holder':'Nursery','Bassinet Conversion Kit':'Nursery',
+  'Bassinet Mattress':'Nursery','Bassinet Mattress Cover':'Nursery',
+  'Bassinet Mattress Protector':'Nursery','Bassinet Organizer':'Nursery',
+  'Bedside Bassinet':'Nursery',
+  'Belly Oil/Butter':'Maternity',
+};
+
+function getCategory(productType, title = '') {
+  if (productType && CATEGORY_MAP[productType]) return CATEGORY_MAP[productType];
+  const t = (title || '').toLowerCase();
+  if (/dress|footie|romper|pajama|pj\b|shirt|pants|short\b|overall|blanket|hat\b|coverall|layette|gown|headband|jacket|bodysuit|onesie|swaddle|sleep.?sack|legging|tee\b/.test(t)) return 'Clothes';
+  if (/stroller toy|activity toy|crinkle|lovey|plush|doll\b|rattle/.test(t)) return 'Toys';
+  if (/\btoy\b|book\b/.test(t)) return 'Toys';
+  if (/bib|placemat|tableware|utensil/.test(t)) return 'Feeding';
+  if (/bassinet|crib\b|nursery/.test(t)) return 'Nursery';
+  if (/\bcarrier\b/.test(t)) return 'Transport';
+  if (/nipple|nursing|lactation|postpartum|belly/.test(t)) return 'Maternity';
+  return 'Other';
+}
+
 export function calcGMVByBrand(orders) {
   const map = {};
   orders
     .filter(o => !o.cancel_reason && o.financial_status !== 'refunded')
     .forEach(o => {
+      const vendorsInOrder = new Set();
       (o.line_items || []).forEach(item => {
         const vendor = item.vendor || 'Unknown';
-        if (!map[vendor]) map[vendor] = 0;
-        map[vendor] += parseFloat(item.price || 0) * (item.quantity || 1);
+        if (!map[vendor]) map[vendor] = { gmv: 0, orderCount: 0 };
+        map[vendor].gmv += parseFloat(item.price || 0) * (item.quantity || 1);
+        vendorsInOrder.add(vendor);
       });
+      vendorsInOrder.forEach(v => map[v].orderCount++);
     });
   return Object.entries(map)
-    .map(([brand, gmv]) => ({ brand, gmv: Math.round(gmv) }))
+    .map(([brand, d]) => ({ brand, gmv: Math.round(d.gmv), orderCount: d.orderCount }))
     .sort((a, b) => b.gmv - a.gmv);
 }
 
@@ -96,7 +135,7 @@ export function calcGMVByCategory(orders) {
     .filter(o => !o.cancel_reason && o.financial_status !== 'refunded')
     .forEach(o => {
       (o.line_items || []).forEach(item => {
-        const cat = item.product_type || 'Other';
+        const cat = getCategory(item.product_type, item.title);
         if (!map[cat]) map[cat] = 0;
         map[cat] += parseFloat(item.price || 0) * (item.quantity || 1);
       });
@@ -104,6 +143,19 @@ export function calcGMVByCategory(orders) {
   return Object.entries(map)
     .map(([category, gmv]) => ({ category, gmv: Math.round(gmv) }))
     .sort((a, b) => b.gmv - a.gmv);
+}
+
+export function calcCatalogByCategory(products) {
+  const cats = {};
+  for (const p of products) {
+    const cat = getCategory(p.product_type, p.title);
+    if (!cats[cat]) cats[cat] = { brands: new Set(), skus: 0 };
+    if (p.vendor) cats[cat].brands.add(p.vendor);
+    cats[cat].skus += (p.variants?.length || 1);
+  }
+  return Object.entries(cats)
+    .map(([category, d]) => ({ category, brands: d.brands.size, skus: d.skus }))
+    .sort((a, b) => b.skus - a.skus);
 }
 
 export function calcBrandConcentration(brandData) {
