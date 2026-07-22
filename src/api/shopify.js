@@ -100,13 +100,15 @@ const CATEGORY_MAP = {
 function getCategory(productType, title = '') {
   if (productType && CATEGORY_MAP[productType]) return CATEGORY_MAP[productType];
   const t = (title || '').toLowerCase();
-  if (/dress|footie|romper|pajama|pj\b|shirt|pants|short\b|overall|blanket|hat\b|coverall|layette|gown|headband|jacket|bodysuit|onesie|swaddle|sleep.?sack|legging|tee\b/.test(t)) return 'Clothes';
-  if (/stroller toy|activity toy|crinkle|lovey|plush|doll\b|rattle/.test(t)) return 'Toys';
-  if (/\btoy\b|book\b/.test(t)) return 'Toys';
-  if (/bib|placemat|tableware|utensil/.test(t)) return 'Feeding';
+  if (/dress|footie|romper|pajama|pj\b|shirt|pants|short\b|overall|blanket|hat\b|coverall|layette|gown|headband|jacket|bodysuit|onesie|swaddle|sleep.?sack|legging|tee\b|jumpsuit/.test(t)) return 'Clothes';
+  if (/stroller toy|activity toy|crinkle|lovey|plush|doll\b|rattle|\bball\b|\bgym\b|\bbox\b|flash card|alphabet card/.test(t)) return 'Toys';
+  if (/\btoy\b|book\b|\bcard\b/.test(t)) return 'Toys';
+  if (/bib|placemat|tableware|utensil|\bcup\b|snack|lunch/.test(t)) return 'Feeding';
+  if (/pacifier|teether/.test(t)) return 'Pacifiers & Teethers';
   if (/bassinet|crib\b|nursery/.test(t)) return 'Nursery';
   if (/\bcarrier\b/.test(t)) return 'Transport';
-  if (/nipple|nursing|lactation|postpartum|belly/.test(t)) return 'Maternity';
+  if (/balm|perineal|nipple|nursing|lactation|postpartum|belly/.test(t)) return 'Bath & Body';
+  if (/maternity/.test(t)) return 'Maternity';
   return 'Other';
 }
 
