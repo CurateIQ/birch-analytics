@@ -50,6 +50,18 @@ const DEFS = {
   avgSessionDuration: 'Average time visitors spend on the site per session. Longer durations signal content resonance and purchase intent.',
   pagesPerSession:    'Average number of pages viewed per session. Higher numbers indicate deeper browsing and product discovery.',
   newUserPct:         'Percentage of sessions from first-time visitors this week. High share signals strong top-of-funnel reach from marketing.',
+  // Email
+  openRate:           'Percentage of delivered emails that were opened by recipients. Industry benchmark for e-commerce is 20–30%. Check Klaviyo dashboard for the latest number.',
+  clickRate:          'Percentage of delivered emails where a recipient clicked at least one link. Industry benchmark for e-commerce is 2–5%. Check Klaviyo dashboard for the latest number.',
+  // Brand Health table columns
+  bhGMV:         'Total value of orders containing at least one item from this brand in the rolling window, before deductions.',
+  bhAOV:         'Average order value for this brand — brand GMV divided by order count.',
+  bhOrders:      'Count of orders containing at least one item from this brand in the rolling window.',
+  bhReturnPct:   'Percentage of orders containing this brand\'s items where a return or refund was issued.',
+  bhCancelPct:   'Percentage of orders containing this brand\'s items that were cancelled before fulfilment.',
+  bhAvgFulfill:  'Mean time from order placement to manufacturer shipping confirmation for this brand.',
+  bhAvgDelivery: 'Average time from order placement to delivery for this brand, using the carrier delivery confirmation timestamp.',
+  bhOnTime:      'Percentage of fulfillments for this brand shipped within 24 hours of order placement. Green ≥85%, amber 70–85%, red <70%.',
 };
 
 function SectionLabel({ id, children }) {
@@ -175,6 +187,41 @@ function OnTimeBadge({ pct }) {
   );
 }
 
+function HeaderDef({ text, def }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <span style={{ position:'relative', display:'inline-flex', alignItems:'center', gap:3 }}>
+      {text}
+      {def && (
+        <>
+          <button
+            onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+            style={{
+              width:12, height:12, borderRadius:'50%', border:'none', cursor:'pointer',
+              background: open ? '#3D3226' : '#E8E3DA',
+              color: open ? '#F5F2EA' : '#8C8A85',
+              fontSize:7, fontWeight:700, padding:0, flexShrink:0,
+              display:'inline-flex', alignItems:'center', justifyContent:'center',
+            }}
+          >?</button>
+          {open && (
+            <div style={{
+              position:'absolute', top:'100%', left:0, zIndex:200, width:190,
+              background:'#F5F2EA', border:'0.5px solid #C8BFB0', borderRadius:6,
+              padding:'7px 9px', fontSize:10, color:'#5F5E5A', lineHeight:1.5,
+              boxShadow:'0 2px 8px rgba(0,0,0,0.09)', marginTop:3,
+              animation:'slideIn 0.12s ease', fontWeight:400, textTransform:'none',
+              letterSpacing:'normal', textAlign:'left',
+            }}>
+              {def}
+            </div>
+          )}
+        </>
+      )}
+    </span>
+  );
+}
+
 const BH_CARD = { background:'#FFFFFF', border:'0.5px solid #E0DDD6', borderRadius:12, padding:'14px', overflow:'hidden', minWidth:0 };
 const BH_HEAD = { fontSize:10, fontWeight:700, color:'#8C8A85', textTransform:'uppercase', letterSpacing:'0.07em', paddingBottom:6, borderBottom:'1px solid #E0DDD6', whiteSpace:'nowrap' };
 const BH_CELL = { padding:'5px 0', borderBottom:'0.5px solid #F0EDE6', verticalAlign:'top' };
@@ -193,8 +240,17 @@ function BrandSalesTable({ title, rows, changeLabel }) {
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10, tableLayout:'auto' }}>
           <thead>
             <tr>
-              {['Brand','GMV','AOV','Orders','Return %','Cancel %'].map(h => (
-                <th key={h} style={{ ...BH_HEAD, textAlign: h === 'Brand' ? 'left' : 'right', paddingRight: h !== 'Brand' ? 8 : 0 }}>{h}</th>
+              {[
+                {label:'Brand',    def:null},
+                {label:'GMV',      def:DEFS.bhGMV},
+                {label:'AOV',      def:DEFS.bhAOV},
+                {label:'Orders',   def:DEFS.bhOrders},
+                {label:'Return %', def:DEFS.bhReturnPct},
+                {label:'Cancel %', def:DEFS.bhCancelPct},
+              ].map(({label, def}) => (
+                <th key={label} style={{ ...BH_HEAD, textAlign: label === 'Brand' ? 'left' : 'right', paddingRight: label !== 'Brand' ? 8 : 0 }}>
+                  <HeaderDef text={label} def={def} />
+                </th>
               ))}
             </tr>
           </thead>
@@ -246,8 +302,16 @@ function BrandFulfillTable({ title, rows }) {
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10, tableLayout:'auto' }}>
           <thead>
             <tr>
-              {['Brand','Orders','Avg fulfill time','Avg delivery time','On-time fulfill %'].map(h => (
-                <th key={h} style={{ ...BH_HEAD, textAlign: h === 'Brand' ? 'left' : 'right', paddingRight: h !== 'Brand' ? 8 : 0 }}>{h}</th>
+              {[
+                {label:'Brand',              def:null},
+                {label:'Orders',             def:DEFS.bhOrders},
+                {label:'Avg fulfill time',   def:DEFS.bhAvgFulfill},
+                {label:'Avg delivery time',  def:DEFS.bhAvgDelivery},
+                {label:'On-time fulfill %',  def:DEFS.bhOnTime},
+              ].map(({label, def}) => (
+                <th key={label} style={{ ...BH_HEAD, textAlign: label === 'Brand' ? 'left' : 'right', paddingRight: label !== 'Brand' ? 8 : 0 }}>
+                  <HeaderDef text={label} def={def} />
+                </th>
               ))}
             </tr>
           </thead>
@@ -940,8 +1004,8 @@ export default function App() {
                 <SectionLabel id="sec-email">Email & CRM</SectionLabel>
                 <div className="kpi-grid">
                   <KPICard label="Total list size" value={fmt.num(data.email.totalListSize)} change={null} definition={DEFS.listSize} />
-                  <KPICard label="Open rate"  value={null} change={null} changeLabel="Klaviyo — check dashboard" />
-                  <KPICard label="Click rate" value={null} change={null} changeLabel="Klaviyo — check dashboard" />
+                  <KPICard label="Open rate"  value={null} change={null} changeLabel="Klaviyo — check dashboard" definition={DEFS.openRate} />
+                  <KPICard label="Click rate" value={null} change={null} changeLabel="Klaviyo — check dashboard" definition={DEFS.clickRate} />
                 </div>
 
                 <div style={{height:40}} />
