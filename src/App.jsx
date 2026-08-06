@@ -189,13 +189,37 @@ function OnTimeBadge({ pct }) {
 
 function HeaderDef({ text, def }) {
   const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+  const btnRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    function handleOutside(e) {
+      if (btnRef.current && !btnRef.current.closest('[data-headerdef]')?.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [open]);
+
+  const toggle = (e) => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left });
+    }
+    setOpen(o => !o);
+  };
+
   return (
-    <span style={{ position:'relative', display:'inline-flex', alignItems:'center', gap:3 }}>
+    <span data-headerdef="1" style={{ display:'inline-flex', alignItems:'center', gap:3 }}>
       {text}
       {def && (
         <>
           <button
-            onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+            ref={btnRef}
+            onClick={toggle}
             style={{
               width:12, height:12, borderRadius:'50%', border:'none', cursor:'pointer',
               background: open ? '#3D3226' : '#E8E3DA',
@@ -206,10 +230,10 @@ function HeaderDef({ text, def }) {
           >?</button>
           {open && (
             <div style={{
-              position:'absolute', top:'100%', left:0, zIndex:200, width:190,
+              position:'fixed', top: pos.top, left: pos.left, zIndex:9999, width:210,
               background:'#F5F2EA', border:'0.5px solid #C8BFB0', borderRadius:6,
-              padding:'7px 9px', fontSize:10, color:'#5F5E5A', lineHeight:1.5,
-              boxShadow:'0 2px 8px rgba(0,0,0,0.09)', marginTop:3,
+              padding:'8px 10px', fontSize:11, color:'#5F5E5A', lineHeight:1.55,
+              boxShadow:'0 2px 12px rgba(0,0,0,0.12)',
               animation:'slideIn 0.12s ease', fontWeight:400, textTransform:'none',
               letterSpacing:'normal', textAlign:'left',
             }}>
