@@ -14,6 +14,7 @@ const DEFS = {
   avgSessionDuration: 'Average time visitors spend on the site per session. Longer durations signal content resonance and purchase intent.',
   pagesPerSession:    'Average number of pages viewed per session. Higher numbers indicate deeper browsing and product discovery.',
   newUserPct:         'Percentage of sessions from first-time visitors this week. High share signals strong top-of-funnel reach from marketing.',
+  activeUsers:        'Distinct users with at least one engaged session this week. Closer to a true unique-visitor count than total sessions, which can double-count a single user across multiple visits.',
   conversion:         'Percentage of unique site visitors who completed a purchase. Sourced from GA4. Rolling 7-day window. Target: 5%. Year-one benchmark: 1.5–3%.',
 };
 
@@ -108,10 +109,17 @@ export function WebsitePage({ data, onBack, scrollTarget }) {
           definition={DEFS.newUserPct}
         />
         <KPICard
-          label="Conversion rate"
-          value={c?.conversionRate ? fmt.pct(c.conversionRate) : null}
+          label="Active users"
+          value={w?.activeUsers != null ? fmt.num(w.activeUsers) : null}
           change={null}
-          changeLabel="GA4 pending"
+          changeLabel={w?.activeUsers == null ? 'GA4 pending' : null}
+          definition={DEFS.activeUsers}
+        />
+        <KPICard
+          label="Conversion rate"
+          value={c?.conversionRate != null ? fmt.pct(c.conversionRate) : null}
+          change={null}
+          changeLabel={c?.conversionRate == null ? 'GA4 pending' : null}
           definition={DEFS.conversion}
         />
       </div>
@@ -177,6 +185,30 @@ export function WebsitePage({ data, onBack, scrollTarget }) {
             data={weeklyData.map(w => ({ weekStart: w.weekStart, value: w.newUserPct }))}
             label="New Visitor %"
             color="#7A5C8A"
+            valueFormatter={v => v != null ? v + '%' : '—'}
+            pending={!connected}
+            pendingMessage="Awaiting GA4 connection"
+          />
+        </ChartCard>
+
+        <ChartCard title="Active Users" id="trend-active-users">
+          <TrendChart
+            id="trend-active-users-chart"
+            data={weeklyData.map(w => ({ weekStart: w.weekStart, value: w.activeUsers }))}
+            label="Active Users"
+            color="#3A8A8A"
+            valueFormatter={v => v?.toLocaleString()}
+            pending={!connected}
+            pendingMessage="Awaiting GA4 connection"
+          />
+        </ChartCard>
+
+        <ChartCard title="Conversion Rate" id="trend-conversion">
+          <TrendChart
+            id="trend-conversion-chart"
+            data={weeklyData.map(w => ({ weekStart: w.weekStart, value: w.conversionRate }))}
+            label="Conversion Rate"
+            color="#C8763A"
             valueFormatter={v => v != null ? v + '%' : '—'}
             pending={!connected}
             pendingMessage="Awaiting GA4 connection"

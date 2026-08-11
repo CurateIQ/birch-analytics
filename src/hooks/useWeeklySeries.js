@@ -117,6 +117,8 @@ async function fetchGA4Week(weekStart) {
     pagesPerSession: engagement?.pagesPerSession ?? null,
     bounceRate: engagement?.bounceRate ?? null,
     newUserPct: engagement?.newUserPct ?? null,
+    activeUsers: engagement?.activeUsers ?? null,
+    conversionRate: engagement?.conversionRate ?? null,
   };
   cache.set(key, result);
   return result;

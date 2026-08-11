@@ -185,6 +185,8 @@ export async function fetchEngagementMetrics(weekStart, weekEnd) {
       { name: 'bounceRate' },
       { name: 'newUsers' },
       { name: 'totalUsers' },
+      { name: 'activeUsers' },
+      { name: 'userConversionRate:purchase' },
     ],
   });
 
@@ -196,11 +198,16 @@ export async function fetchEngagementMetrics(weekStart, weekEnd) {
   const secs = Math.round(avgDuration % 60);
   const newUsers   = parseInt(row.metricValues?.[3]?.value || '0', 10);
   const totalUsers = parseInt(row.metricValues?.[4]?.value || '0', 10);
+  const activeUsers = parseInt(row.metricValues?.[5]?.value || '0', 10);
+  // GA4 returns userConversionRate as a decimal fraction (e.g. 0.032 = 3.2%)
+  const conversionRateRaw = parseFloat(row.metricValues?.[6]?.value || '0');
 
   return {
     avgSessionDuration: `${mins}m ${secs}s`,
     pagesPerSession:    Math.round(parseFloat(row.metricValues?.[1]?.value || '0') * 10) / 10,
     bounceRate:         Math.round(parseFloat(row.metricValues?.[2]?.value || '0') * 100),
     newUserPct:         totalUsers > 0 ? Math.round((newUsers / totalUsers) * 100) : null,
+    activeUsers:        activeUsers || null,
+    conversionRate:     conversionRateRaw > 0 ? Math.round(conversionRateRaw * 1000) / 10 : null,
   };
 }

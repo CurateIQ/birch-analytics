@@ -59,6 +59,7 @@ const DEFS = {
   avgSessionDuration: 'Average time visitors spend on the site per session. Longer durations signal content resonance and purchase intent.',
   pagesPerSession:    'Average number of pages viewed per session. Higher numbers indicate deeper browsing and product discovery.',
   newUserPct:         'Percentage of sessions from first-time visitors this week. High share signals strong top-of-funnel reach from marketing.',
+  activeUsers:        'Distinct users with at least one engaged session this week. Closer to a true unique-visitor count than total sessions, which can double-count a single user across multiple visits.',
   // Email
   openRate:           'Percentage of delivered emails that were opened by recipients. Industry benchmark for e-commerce is 20–30%. Check Klaviyo dashboard for the latest number.',
   clickRate:          'Percentage of delivered emails where a recipient clicked at least one link. Industry benchmark for e-commerce is 2–5%. Check Klaviyo dashboard for the latest number.',
@@ -725,7 +726,7 @@ export default function App() {
                   <KPICard label="New customers"     value={fmt.num(data.customers.newCustomerCount)} change={data.customers.newCustomersWoW} definition={DEFS.newCustomers} onClick={() => goTo('customers','trend-new-orders-pct')} />
                   <KPICard label="New orders %"      value={fmt.pct(data.customers.newOrdersPct)}     change={null}                          definition={DEFS.newOrdersPct} onClick={() => goTo('customers','trend-new-orders-pct')} />
                   <KPICard label="Returning orders %" value={fmt.pct(data.customers.returningOrdersPct)} change={null}                       definition={DEFS.returningPct} onClick={() => goTo('customers','trend-returning-pct')} />
-                  <KPICard label="Conversion rate"   value={data.customers.conversionRate ? fmt.pct(data.customers.conversionRate) : null} change={null} changeLabel="GA4 pending" definition={DEFS.conversion} onClick={() => goTo('customers')} />
+                  <KPICard label="Conversion rate"   value={data.customers.conversionRate != null ? fmt.pct(data.customers.conversionRate) : null} change={null} changeLabel={data.customers.conversionRate == null ? 'GA4 pending' : null} definition={DEFS.conversion} onClick={() => goTo('customers')} />
                 </div>
 
                 <ChartCard title="What are customers asking? — last 7 days" style={{ marginTop:10 }}>
@@ -872,10 +873,18 @@ export default function App() {
                     onClick={() => goTo('website','trend-new-user-pct')}
                   />
                   <KPICard
-                    label="Conversion rate"
-                    value={data.customers.conversionRate ? fmt.pct(data.customers.conversionRate) : null}
+                    label="Active users"
+                    value={data.website.activeUsers != null ? fmt.num(data.website.activeUsers) : null}
                     change={null}
-                    changeLabel="GA4 pending"
+                    changeLabel={data.website.activeUsers == null ? 'GA4 pending' : null}
+                    definition={DEFS.activeUsers}
+                    onClick={() => goTo('website','trend-active-users')}
+                  />
+                  <KPICard
+                    label="Conversion rate"
+                    value={data.customers.conversionRate != null ? fmt.pct(data.customers.conversionRate) : null}
+                    change={null}
+                    changeLabel={data.customers.conversionRate == null ? 'GA4 pending' : null}
                     definition={DEFS.conversion}
                     onClick={() => goTo('website')}
                   />

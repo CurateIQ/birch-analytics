@@ -205,7 +205,7 @@ export function useDashboardData() {
           newCustomersWoW:  calcWoWChange(wCusts.length, pCusts.length),
           newOrdersPct:     custM.newOrdersPct,
           returningOrdersPct: custM.returningOrdersPct,
-          conversionRate:   null,
+          conversionRate:   engage?.conversionRate ?? null,
         },
         marketplace: {
           totalBrands:        catalogM.totalBrands,
@@ -240,6 +240,7 @@ export function useDashboardData() {
           pagesPerSession:    engage?.pagesPerSession ?? null,
           bounceRate:         engage?.bounceRate ?? null,
           newUserPct:         engage?.newUserPct ?? null,
+          activeUsers:        engage?.activeUsers ?? null,
           // Charts
           dailySessions: dailySess,
           topLandingPages: landingPg,
