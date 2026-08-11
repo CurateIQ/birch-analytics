@@ -14,6 +14,15 @@ import { Sidebar } from './components/Sidebar';
 import { ChatTranscriptModal, customerAdminUrl } from './components/ChatTranscriptModal';
 import { QueryExport } from './components/QueryExport';
 import { fetchBrandHealthWeekly, fetchBrandHealthMonthly } from './api/shopify';
+import { OrdersPage }      from './pages/OrdersPage';
+import { CustomersPage }   from './pages/CustomersPage';
+import { OperationsPage }  from './pages/OperationsPage';
+import { WebsitePage }     from './pages/WebsitePage';
+import { MarketplacePage } from './pages/MarketplacePage';
+import { EmailPage }       from './pages/EmailPage';
+import { AskBirchPage }    from './pages/AskBirchPage';
+import { useWeeklySeries } from './hooks/useWeeklySeries';
+import { TrendChart }      from './components/TrendChart';
 
 const fmt = {
   usd:    v => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { minimumFractionDigits:0, maximumFractionDigits:0 })}`,
@@ -424,6 +433,7 @@ function BrandHealthPage({ onBack }) {
   const [monthly, setMonthly] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
+  const { weeklyData: shopifyWeekly, loading: trendLoading } = useWeeklySeries('shopify');
 
   useEffect(() => {
     setLoading(true);
@@ -474,7 +484,7 @@ function BrandHealthPage({ onBack }) {
 
           {/* Row 2 — Fulfillment & Delivery */}
           <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.08em', color:'#8C8A85', textTransform:'uppercase', marginBottom:8 }}>Fulfillment & Delivery Performance</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:40 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:24 }}>
             <BrandFulfillTable
               title="Rolling 7 days"
               rows={weekly}
@@ -483,6 +493,50 @@ function BrandHealthPage({ onBack }) {
               title="Rolling 30 days"
               rows={monthly}
             />
+          </div>
+
+          {/* Row 3 — Weekly Trends (Store-wide) */}
+          <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.08em', color:'#8C8A85', textTransform:'uppercase', marginBottom:8 }}>Weekly Trends (Store-wide)</div>
+          {trendLoading && (
+            <div style={{ fontSize:12, color:'#8C8A85', marginBottom:8 }}>Loading weekly trend data…</div>
+          )}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:40 }}>
+            <ChartCard title="Store GMV" id="trend-bh-gmv">
+              <TrendChart
+                id="trend-bh-gmv-chart"
+                data={shopifyWeekly.map(w => ({ weekStart: w.weekStart, value: w.gmv }))}
+                label="Store GMV"
+                color="#5A7A5C"
+                valueFormatter={v => '$' + Math.round(v).toLocaleString()}
+              />
+            </ChartCard>
+            <ChartCard title="Return Rate" id="trend-bh-return">
+              <TrendChart
+                id="trend-bh-return-chart"
+                data={shopifyWeekly.map(w => ({ weekStart: w.weekStart, value: w.returnRate }))}
+                label="Return Rate"
+                color="#A32D2D"
+                valueFormatter={v => v != null ? v + '%' : '—'}
+              />
+            </ChartCard>
+            <ChartCard title="On-Time Fulfillment %" id="trend-bh-ontime">
+              <TrendChart
+                id="trend-bh-ontime-chart"
+                data={shopifyWeekly.map(w => ({ weekStart: w.weekStart, value: w.onTimePct }))}
+                label="On-Time Fulfillment %"
+                color="#7A9E7E"
+                valueFormatter={v => v != null ? v + '%' : '—'}
+              />
+            </ChartCard>
+            <ChartCard title="Avg Fulfillment Days" id="trend-bh-fulfill">
+              <TrendChart
+                id="trend-bh-fulfill-chart"
+                data={shopifyWeekly.map(w => ({ weekStart: w.weekStart, value: w.avgFulfillmentDays }))}
+                label="Avg Fulfillment Days"
+                color="#C8763A"
+                valueFormatter={v => v != null ? v + 'd' : '—'}
+              />
+            </ChartCard>
           </div>
         </>
       )}
@@ -496,23 +550,47 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('orders');
   const [currentView, setCurrentView]   = useState('dashboard');
   const [chatSessionId, setChatSessionId] = useState(null);
+  const [scrollTarget, setScrollTarget] = useState(null);
   const metricsRef = useRef(null);
+
+  const goTo = (sectionId, chartId = null) => {
+    setCurrentView(sectionId);
+    setActiveSection(sectionId);
+    setScrollTarget(chartId);
+    if (metricsRef.current) metricsRef.current.scrollTop = 0;
+  };
+
+  const goBack = () => {
+    setCurrentView('dashboard');
+    setActiveSection('orders');
+    setScrollTarget(null);
+  };
 
   const now = new Date();
   const weekLabel = `Week of ${now.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}`;
 
   const handleSidebarClose = (sectionId) => {
     setSidebarOpen(false);
-    if (sectionId === 'brands') {
+    if (!sectionId) return;
+    if (sectionId === 'growth') {
+      setCurrentView('dashboard');
+      setActiveSection('growth');
+      setTimeout(() => document.getElementById('sec-growth')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    } else if (sectionId === 'brands') {
       setCurrentView('brands');
       setActiveSection('brands');
       if (metricsRef.current) metricsRef.current.scrollTop = 0;
-    } else if (sectionId) {
+    } else if (['orders','customers','operations','website','marketplace','email','askbirch'].includes(sectionId)) {
+      setCurrentView(sectionId);
+      setActiveSection(sectionId);
+      setScrollTarget(null);
+      if (metricsRef.current) metricsRef.current.scrollTop = 0;
+    } else {
       setCurrentView('dashboard');
       setActiveSection(sectionId);
       setTimeout(() => {
         const el = document.getElementById(`sec-${sectionId}`);
-        if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 60);
     }
   };
@@ -600,8 +678,16 @@ export default function App() {
             )}
 
             {currentView === 'brands' && (
-              <BrandHealthPage onBack={() => { setCurrentView('dashboard'); setActiveSection('orders'); }} />
+              <BrandHealthPage onBack={goBack} />
             )}
+
+            {currentView === 'orders'      && <OrdersPage      data={data} onBack={goBack} scrollTarget={scrollTarget} />}
+            {currentView === 'customers'   && <CustomersPage   data={data} onBack={goBack} scrollTarget={scrollTarget} />}
+            {currentView === 'operations'  && <OperationsPage  data={data} onBack={goBack} scrollTarget={scrollTarget} />}
+            {currentView === 'website'     && <WebsitePage     data={data} onBack={goBack} scrollTarget={scrollTarget} />}
+            {currentView === 'marketplace' && <MarketplacePage data={data} onBack={goBack} scrollTarget={scrollTarget} />}
+            {currentView === 'email'       && <EmailPage       data={data} onBack={goBack} scrollTarget={scrollTarget} />}
+            {currentView === 'askbirch'    && <AskBirchPage    data={data} onBack={goBack} scrollTarget={scrollTarget} onViewChat={setChatSessionId} />}
 
             {data && currentView === 'dashboard' && (
               <>
@@ -609,13 +695,15 @@ export default function App() {
                 <SectionLabel id="sec-orders">Orders & Transactions</SectionLabel>
                 <div className="kpi-grid">
                   <KPICard label="GMV (week)"       value={fmt.usd(data.orders.gmv)}           change={data.orders.gmvWoW}     definition={DEFS.gmv}
-                    drillTitle="GMV by brand" drillData={(data.orders.gmvByBrand||[]).slice(0,8).map(b=>({label:b.brand,value:b.gmv,formatted:fmt.usd(b.gmv)}))} />
+                    drillTitle="GMV by brand" drillData={(data.orders.gmvByBrand||[]).slice(0,8).map(b=>({label:b.brand,value:b.gmv,formatted:fmt.usd(b.gmv)}))}
+                    onClick={() => goTo('orders','trend-gmv')} />
                   <KPICard label="Orders placed"    value={fmt.num(data.orders.orderCount)}      change={data.orders.ordersWoW}  definition={DEFS.orders}
-                    drillTitle="Orders by category" drillData={(data.orders.gmvByCategory||[]).slice(0,8).map(c=>({label:c.category,value:c.gmv,formatted:fmt.usd(c.gmv)}))} />
-                  <KPICard label="Avg order value"  value={fmt.usdDec(data.orders.aov)}          change={data.orders.aovWoW}     definition={DEFS.aov} />
-                  <KPICard label="Items per order"  value={data.orders.itemsPerOrder}             change={null}                   definition={DEFS.itemsPerOrder} />
-                  <KPICard label="Cancellation rate" value={fmt.pct(data.orders.cancellationRate)} change={null}                  definition={DEFS.cancellation} />
-                  <KPICard label="Return rate"      value={fmt.pct(data.orders.returnRate)}       change={null}                   definition={DEFS.returnRate} />
+                    drillTitle="Orders by category" drillData={(data.orders.gmvByCategory||[]).slice(0,8).map(c=>({label:c.category,value:c.gmv,formatted:fmt.usd(c.gmv)}))}
+                    onClick={() => goTo('orders','trend-orders')} />
+                  <KPICard label="Avg order value"  value={fmt.usdDec(data.orders.aov)}          change={data.orders.aovWoW}     definition={DEFS.aov}   onClick={() => goTo('orders','trend-aov')} />
+                  <KPICard label="Items per order"  value={data.orders.itemsPerOrder}             change={null}                   definition={DEFS.itemsPerOrder} onClick={() => goTo('orders','trend-items')} />
+                  <KPICard label="Cancellation rate" value={fmt.pct(data.orders.cancellationRate)} change={null}                  definition={DEFS.cancellation}  onClick={() => goTo('orders','trend-cancel')} />
+                  <KPICard label="Return rate"      value={fmt.pct(data.orders.returnRate)}       change={null}                   definition={DEFS.returnRate}    onClick={() => goTo('orders','trend-return')} />
                 </div>
 
                 <ChartCard title="Daily GMV — last 14 days" style={{ marginTop:10 }}>
@@ -632,12 +720,12 @@ export default function App() {
                 {/* #2 Customers */}
                 <SectionLabel id="sec-customers">Customers</SectionLabel>
                 <div className="kpi-grid">
-                  <KPICard label="MAU"               value={fmt.num(data.customers.mau)}              change={null}                        changeLabel="30 complete days" definition={DEFS.mau} />
-                  <KPICard label="WAU"               value={fmt.num(data.customers.wau)}              change={null}                        definition={DEFS.wau} />
-                  <KPICard label="New customers"     value={fmt.num(data.customers.newCustomerCount)} change={data.customers.newCustomersWoW} definition={DEFS.newCustomers} />
-                  <KPICard label="New orders %"      value={fmt.pct(data.customers.newOrdersPct)}     change={null}                        definition={DEFS.newOrdersPct} />
-                  <KPICard label="Returning orders %" value={fmt.pct(data.customers.returningOrdersPct)} change={null}                     definition={DEFS.returningPct} />
-                  <KPICard label="Conversion rate"   value={data.customers.conversionRate ? fmt.pct(data.customers.conversionRate) : null} change={null} changeLabel="GA4 pending" definition={DEFS.conversion} />
+                  <KPICard label="MAU"               value={fmt.num(data.customers.mau)}              change={null}                          changeLabel="30 complete days" definition={DEFS.mau}          onClick={() => goTo('customers','trend-mau')} />
+                  <KPICard label="WAU"               value={fmt.num(data.customers.wau)}              change={null}                          definition={DEFS.wau}          onClick={() => goTo('customers')} />
+                  <KPICard label="New customers"     value={fmt.num(data.customers.newCustomerCount)} change={data.customers.newCustomersWoW} definition={DEFS.newCustomers} onClick={() => goTo('customers','trend-new-orders-pct')} />
+                  <KPICard label="New orders %"      value={fmt.pct(data.customers.newOrdersPct)}     change={null}                          definition={DEFS.newOrdersPct} onClick={() => goTo('customers','trend-new-orders-pct')} />
+                  <KPICard label="Returning orders %" value={fmt.pct(data.customers.returningOrdersPct)} change={null}                       definition={DEFS.returningPct} onClick={() => goTo('customers','trend-returning-pct')} />
+                  <KPICard label="Conversion rate"   value={data.customers.conversionRate ? fmt.pct(data.customers.conversionRate) : null} change={null} changeLabel="GA4 pending" definition={DEFS.conversion} onClick={() => goTo('customers')} />
                 </div>
 
                 <ChartCard title="What are customers asking? — last 7 days" style={{ marginTop:10 }}>
@@ -747,6 +835,7 @@ export default function App() {
                     label="Sessions (week)"
                     value={data.website.totalSessions != null ? fmt.num(data.website.totalSessions) : null}
                     change={data.website.totalSessionsWoW}
+                    onClick={() => goTo('website','trend-sessions')}
                     changeLabel={data.website.totalSessions == null ? 'GA4 pending' : null}
                     definition={DEFS.totalSessions}
                   />
@@ -756,6 +845,7 @@ export default function App() {
                     change={null}
                     changeLabel={data.website.bounceRate == null ? 'GA4 pending' : 'lower is better'}
                     definition={DEFS.bounceRate}
+                    onClick={() => goTo('website','trend-bounce')}
                   />
                   <KPICard
                     label="Avg session duration"
@@ -763,6 +853,7 @@ export default function App() {
                     change={null}
                     changeLabel={data.website.avgSessionDuration == null ? 'GA4 pending' : null}
                     definition={DEFS.avgSessionDuration}
+                    onClick={() => goTo('website','trend-session-duration')}
                   />
                   <KPICard
                     label="Pages per session"
@@ -770,6 +861,7 @@ export default function App() {
                     change={null}
                     changeLabel={data.website.pagesPerSession == null ? 'GA4 pending' : null}
                     definition={DEFS.pagesPerSession}
+                    onClick={() => goTo('website','trend-pages-per-session')}
                   />
                   <KPICard
                     label="New visitor %"
@@ -777,6 +869,7 @@ export default function App() {
                     change={null}
                     changeLabel={data.website.newUserPct == null ? 'GA4 pending' : null}
                     definition={DEFS.newUserPct}
+                    onClick={() => goTo('website','trend-new-user-pct')}
                   />
                   <KPICard
                     label="Conversion rate"
@@ -784,6 +877,7 @@ export default function App() {
                     change={null}
                     changeLabel="GA4 pending"
                     definition={DEFS.conversion}
+                    onClick={() => goTo('website')}
                   />
                 </div>
 
@@ -940,13 +1034,14 @@ export default function App() {
                 <SectionLabel id="sec-marketplace">Marketplace & Supply</SectionLabel>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, alignItems:'start' }}>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                    <KPICard label="Total brands live"       value={fmt.num(data.marketplace.totalBrands)}       change={null} changeLabel={`+${data.marketplace.newBrandsThisWeek} this week`} definition={DEFS.totalBrands} />
-                    <KPICard label="Total SKUs live"         value={fmt.num(data.marketplace.totalSKUs)}         change={null} definition={DEFS.totalSKUs} />
-                    <KPICard label="New brands (week)"       value={fmt.num(data.marketplace.newBrandsThisWeek)} change={null} definition={DEFS.newBrands} />
+                    <KPICard label="Total brands live"       value={fmt.num(data.marketplace.totalBrands)}       change={null} changeLabel={`+${data.marketplace.newBrandsThisWeek} this week`} definition={DEFS.totalBrands}   onClick={() => goTo('marketplace')} />
+                    <KPICard label="Total SKUs live"         value={fmt.num(data.marketplace.totalSKUs)}         change={null} definition={DEFS.totalSKUs}      onClick={() => goTo('marketplace')} />
+                    <KPICard label="New brands (week)"       value={fmt.num(data.marketplace.newBrandsThisWeek)} change={null} definition={DEFS.newBrands}      onClick={() => goTo('marketplace')} />
                     <KPICard label="Top 5 brand concentration" value={fmt.pct(data.marketplace.brandConcentration)} change={null} definition={DEFS.concentration}
-                      drillTitle="Brand GMV breakdown" drillData={(data.marketplace.gmvByBrand||[]).slice(0,8).map(b=>({label:b.brand,value:b.gmv,formatted:fmt.usd(b.gmv)}))} />
-                    <KPICard label="Avg fulfillment time"    value={fmt.days(data.marketplace.avgFulfillmentDays)} change={null} definition={DEFS.fulfillment} />
-                    <KPICard label="Overall return rate"     value={fmt.pct(data.marketplace.overallReturnRate)}  change={null} definition={DEFS.overallReturn} />
+                      drillTitle="Brand GMV breakdown" drillData={(data.marketplace.gmvByBrand||[]).slice(0,8).map(b=>({label:b.brand,value:b.gmv,formatted:fmt.usd(b.gmv)}))}
+                      onClick={() => goTo('marketplace')} />
+                    <KPICard label="Avg fulfillment time"    value={fmt.days(data.marketplace.avgFulfillmentDays)} change={null} definition={DEFS.fulfillment}   onClick={() => goTo('marketplace','trend-avg-fulfill')} />
+                    <KPICard label="Overall return rate"     value={fmt.pct(data.marketplace.overallReturnRate)}  change={null} definition={DEFS.overallReturn}  onClick={() => goTo('marketplace','trend-overall-return')} />
                   </div>
                   <CatalogByCategoryCard data={data.marketplace.catalogByCategory} />
                 </div>
@@ -1027,9 +1122,9 @@ export default function App() {
                 {/* Email */}
                 <SectionLabel id="sec-email">Email & CRM</SectionLabel>
                 <div className="kpi-grid">
-                  <KPICard label="Total list size" value={fmt.num(data.email.totalListSize)} change={null} definition={DEFS.listSize} />
-                  <KPICard label="Open rate"  value={null} change={null} changeLabel="Klaviyo — check dashboard" definition={DEFS.openRate} />
-                  <KPICard label="Click rate" value={null} change={null} changeLabel="Klaviyo — check dashboard" definition={DEFS.clickRate} />
+                  <KPICard label="Total list size" value={fmt.num(data.email.totalListSize)} change={null} definition={DEFS.listSize} onClick={() => goTo('email','trend-list-size')} />
+                  <KPICard label="Open rate"  value={null} change={null} changeLabel="Klaviyo — check dashboard" definition={DEFS.openRate}  onClick={() => goTo('email','trend-open-rate')} />
+                  <KPICard label="Click rate" value={null} change={null} changeLabel="Klaviyo — check dashboard" definition={DEFS.clickRate} onClick={() => goTo('email','trend-click-rate')} />
                 </div>
 
                 <div style={{height:40}} />

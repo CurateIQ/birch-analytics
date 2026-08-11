@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 
-export function KPICard({ label, value, change, changeLabel, suffix = '', drillData, drillTitle, definition }) {
+export function KPICard({ label, value, change, changeLabel, suffix = '', drillData, drillTitle, definition, onClick }) {
   const [active, setActive]     = useState(false);
   const [showDrill, setShowDrill] = useState(false);
   const [showDef, setShowDef]   = useState(false);
@@ -22,13 +22,13 @@ export function KPICard({ label, value, change, changeLabel, suffix = '', drillD
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
       <div
-        onClick={() => setActive(a => !a)}
+        onClick={(e) => { if (onClick) { onClick(e); } else { setActive(a => !a); } }}
         onDoubleClick={() => { if (drillData) setShowDrill(s => !s); }}
         style={{
           background: active ? '#FFFFFF' : '#F4F2EC',
           border: `0.5px solid ${active ? '#5A7A5C' : '#E0DDD6'}`,
           borderRadius: 8, padding: '10px 12px',
-          cursor: drillData ? 'pointer' : 'default',
+          cursor: (onClick || drillData) ? 'pointer' : 'default',
           transition: 'all 0.15s', position: 'relative',
         }}
       >
