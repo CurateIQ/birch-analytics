@@ -257,6 +257,18 @@ async function handleShopify(subPath, queryString) {
   return ok(result.body);
 }
 
+async function handleVeeqo(subPath, queryString) {
+  const key = process.env.VEEQO_API_KEY;
+  if (!key) return err(500, 'Missing VEEQO_API_KEY');
+  const qs = queryString ? `?${queryString}` : '';
+  const result = await httpsGet('api.veeqo.com', `${subPath}${qs}`, {
+    'x-api-key': key,
+    'Accept': 'application/json',
+  });
+  if (result.status !== 200) return err(result.status, `Veeqo API error: ${JSON.stringify(result.body)}`);
+  return ok(result.body);
+}
+
 async function handleKlaviyo(subPath, queryString) {
   const key = process.env.KLAVIYO_PRIVATE_KEY;
   if (!key) return err(500, 'Missing KLAVIYO_PRIVATE_KEY');
@@ -440,6 +452,10 @@ export const handler = async (event) => {
 
   if (rawPath.startsWith('/shopify/')) {
     return handleShopify(rawPath.replace('/shopify', ''), queryString);
+  }
+
+  if (rawPath.startsWith('/veeqo/')) {
+    return handleVeeqo(rawPath.replace('/veeqo', ''), queryString);
   }
 
   if (rawPath.startsWith('/klaviyo/')) {

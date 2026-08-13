@@ -1,7 +1,8 @@
 /**
- * snapshot.mjs — Daily Collective cost snapshot Lambda.
- * Triggered by EventBridge cron (2am ET). Queries Shopify Admin GraphQL for all
- * products from the 6 Collective vendors, writes a dated JSON file to S3.
+ * snapshot.mjs — Daily full-catalog cost snapshot Lambda.
+ * Triggered by EventBridge cron (2am ET). Queries Shopify Admin GraphQL for ALL
+ * products in the catalog (no vendor filter), writes a dated JSON file to S3.
+ * A single snapshot serves Collective, NJ Warehouse, and future streams.
  *
  * Required env vars: SHOPIFY_STORE, SHOPIFY_ACCESS_TOKEN (or SHOPIFY_CLIENT_ID +
  * SHOPIFY_CLIENT_SECRET), COST_SNAPSHOTS_BUCKET.
@@ -12,18 +13,11 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const s3 = new S3Client({ region: 'us-east-1' });
 
-const COLLECTIVE_VENDORS = [
-  "Apple Park & Organic Farm Buddies",
-  "DYPER",
-  "L'ovedbaby",
-  "Makemake Organics",
-  "Parasol Co",
-  "ezpz",
-];
-
+// Query ALL products — no vendor filter. The `extensions.cost.throttleStatus`
+// block lets us back off before hitting Shopify's API rate limit.
 const COST_QUERY = `
-  query($query: String!, $cursor: String) {
-    products(first: 100, query: $query, after: $cursor) {
+  query($cursor: String) {
+    products(first: 100, after: $cursor) {
       pageInfo { hasNextPage endCursor }
       nodes {
         title
@@ -105,63 +99,65 @@ export const handler = async () => {
   const date = new Date().toISOString().slice(0, 10);
   const items = [];
   let nullCostCount = 0;
+  let cursor = null;
+  let page = 0;
 
-  for (const vendor of COLLECTIVE_VENDORS) {
-    let cursor = null;
-    let page = 0;
-    let vendorCount = 0;
+  do {
+    if (page > 0) await new Promise(r => setTimeout(r, 300));
 
-    do {
-      if (page > 0) await new Promise(r => setTimeout(r, 300));
+    const result = await httpsPost(
+      store,
+      '/admin/api/2025-01/graphql.json',
+      { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+      { query: COST_QUERY, variables: { cursor } }
+    );
 
-      const result = await httpsPost(
-        store,
-        '/admin/api/2025-01/graphql.json',
-        { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
-        { query: COST_QUERY, variables: { query: `vendor:"${vendor}"`, cursor } }
-      );
+    if (result.status !== 200) {
+      console.error(`GraphQL error (page ${page}): ${result.status}`, JSON.stringify(result.body));
+      break;
+    }
 
-      if (result.status !== 200) {
-        console.error(`GraphQL error for vendor "${vendor}" (page ${page}): ${result.status}`, JSON.stringify(result.body));
-        break;
+    const gqlErrors = result.body.errors;
+    if (gqlErrors?.length) {
+      console.error(`GraphQL errors (page ${page}):`, JSON.stringify(gqlErrors));
+      break;
+    }
+
+    // Back off before hitting Shopify's rate limit bucket
+    const throttle = result.body.extensions?.cost?.throttleStatus;
+    if (throttle && throttle.currentlyAvailable < 200) {
+      const waitMs = Math.ceil((200 - throttle.currentlyAvailable) / (throttle.restoreRate || 50) * 1000);
+      console.log(`Throttle limit low (${throttle.currentlyAvailable}), waiting ${waitMs}ms`);
+      await new Promise(r => setTimeout(r, waitMs));
+    }
+
+    const products = result.body.data?.products;
+    if (!products) break;
+
+    for (const product of products.nodes) {
+      for (const variant of product.variants.nodes) {
+        const rawCost = variant.inventoryItem?.unitCost?.amount;
+        const cost = rawCost != null ? parseFloat(rawCost) : null;
+        const variantId = variant.id?.replace('gid://shopify/ProductVariant/', '') ?? null;
+
+        if (cost === null) nullCostCount++;
+
+        items.push({
+          sku: variant.sku || null,
+          variantId,
+          vendor: product.vendor,
+          title: `${product.title} — ${variant.title}`,
+          retailPrice: parseFloat(variant.price || 0),
+          cost,
+          flagged: cost === null,
+        });
       }
+    }
 
-      const gqlErrors = result.body.errors;
-      if (gqlErrors?.length) {
-        console.error(`GraphQL errors for vendor "${vendor}":`, JSON.stringify(gqlErrors));
-        break;
-      }
-
-      const products = result.body.data?.products;
-      if (!products) break;
-
-      for (const product of products.nodes) {
-        for (const variant of product.variants.nodes) {
-          const rawCost = variant.inventoryItem?.unitCost?.amount;
-          const cost = rawCost != null ? parseFloat(rawCost) : null;
-          const variantId = variant.id?.replace('gid://shopify/ProductVariant/', '') ?? null;
-
-          if (cost === null) nullCostCount++;
-
-          items.push({
-            sku: variant.sku || null,
-            variantId,
-            vendor: product.vendor,
-            title: `${product.title} — ${variant.title}`,
-            retailPrice: parseFloat(variant.price || 0),
-            cost,
-            flagged: cost === null,
-          });
-          vendorCount++;
-        }
-      }
-
-      cursor = products.pageInfo.hasNextPage ? products.pageInfo.endCursor : null;
-      page++;
-    } while (cursor && page < 50);
-
-    console.log(`${vendor}: ${vendorCount} variants fetched`);
-  }
+    cursor = products.pageInfo.hasNextPage ? products.pageInfo.endCursor : null;
+    page++;
+    if (page % 10 === 0) console.log(`Page ${page}: ${items.length} variants so far`);
+  } while (cursor && page < 200);
 
   const snapshot = {
     date,
@@ -178,6 +174,6 @@ export const handler = async () => {
     ContentType: 'application/json',
   }));
 
-  console.log(`Snapshot complete: ${date}.json — ${items.length} variants, ${nullCostCount} null-cost`);
+  console.log(`Snapshot complete: ${date}.json — ${items.length} variants across ${page} pages, ${nullCostCount} null-cost`);
   return { statusCode: 200, body: JSON.stringify({ date, itemCount: items.length, nullCostCount }) };
 };
