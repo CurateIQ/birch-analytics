@@ -17,6 +17,7 @@ const SECTIONS = [
       { id:'growth',      icon:'📈', name:'Growth & Catalog',      sub:'GMV by brand, category trends',         status:'live' },
       { id:'marketplace', icon:'🏪', name:'Marketplace & Supply',  sub:'Brands, SKUs, fulfillment',             status:'live' },
       { id:'brands',      icon:'🏷️', name:'Brand Health',          sub:'Per-brand GMV, fulfillment, on-time %', status:'live' },
+      { id:'revenue',     icon:'💰', name:'Revenue & Unit Economics', sub:'Collective margin, cost snapshots', status:'live' },
       { id:'email',       icon:'✉️', name:'Email & CRM',           sub:'List size, open rate, click rate',      status:'live' },
       { id:'askbirch',    icon:'💬', name:'Ask Birch Queries',     sub:'What customers are asking',             status:'live' },
     ],
@@ -24,7 +25,6 @@ const SECTIONS = [
   {
     group: 'Coming Soon',
     items: [
-      { id:'revenue',    icon:'💰', name:'Revenue & Unit Economics', sub:'Take rate, margin, burn, runway',  status:'soon' },
       { id:'marketing',  icon:'📣', name:'Marketing',               sub:'CAC, paid, organic, influencer',    status:'soon' },
       { id:'finance',    icon:'🧾', name:'Finance & Tax',          sub:'Net revenue, tax, compliance',       status:'soon' },
     ],

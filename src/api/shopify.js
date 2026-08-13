@@ -35,9 +35,38 @@ export async function fetchOrders(startDate, endDate, limit = 250) {
     created_at_min: startDate,
     created_at_max: endDate,
     limit,
-    fields: 'id,created_at,total_price,line_items,financial_status,fulfillment_status,cancel_reason,customer,fulfillments',
+    fields: 'id,name,created_at,total_price,line_items,financial_status,fulfillment_status,cancel_reason,customer,fulfillments',
   });
   return data.orders || [];
+}
+
+// Collective vendor set (duplicated here for classification; collectiveMargin.js is the source of truth for margin calcs)
+const COLLECTIVE_VENDORS_SET = new Set([
+  "Apple Park & Organic Farm Buddies", "DYPER", "L'ovedbaby",
+  "Makemake Organics", "Parasol Co", "ezpz",
+]);
+
+/**
+ * Classifies the primary fulfillment stream for an order.
+ * Returns: 'collective' | 'nj_warehouse' | 'retail_pos' | 'unknown'
+ *
+ * Note: 'nj_warehouse' vs 'jit' cannot be distinguished from Shopify data alone —
+ * both use fulfillment_service === 'manual'. Use Veeqo allocation.warehouse.name
+ * to distinguish NJ Warehouse from JIT locations definitively.
+ *
+ * @param {object} order  Shopify order object (must include line_items)
+ */
+export function classifyOrderStream(order) {
+  if (order.source_name === 'pos') return 'retail_pos';
+  const items = order.line_items || [];
+  if (!items.length) return 'unknown';
+  const hasCollective = items.some(
+    item => COLLECTIVE_VENDORS_SET.has(item.vendor) || item.fulfillment_service?.includes('shopify-collective')
+  );
+  const hasManual = items.some(item => item.fulfillment_service === 'manual');
+  if (hasCollective) return 'collective';
+  if (hasManual) return 'nj_warehouse'; // may include JIT — use Veeqo to split further
+  return 'unknown';
 }
 
 export function calcOrderMetrics(orders) {
@@ -97,7 +126,7 @@ const CATEGORY_MAP = {
   'Belly Oil/Butter':'Maternity',
 };
 
-function getCategory(productType, title = '') {
+export function getCategory(productType, title = '') {
   if (productType && CATEGORY_MAP[productType]) return CATEGORY_MAP[productType];
   const t = (title || '').toLowerCase();
   if (/dress|footie|romper|pajama|pj\b|shirt|pants|short\b|overall|blanket|hat\b|coverall|layette|gown|headband|jacket|bodysuit|onesie|swaddle|sleep.?sack|legging|tee\b|jumpsuit/.test(t)) return 'Clothes';

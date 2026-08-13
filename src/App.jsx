@@ -22,6 +22,7 @@ import { CampaignsPage }   from './pages/CampaignsPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { EmailPage }       from './pages/EmailPage';
 import { AskBirchPage }    from './pages/AskBirchPage';
+import { UnitEconomicsPage } from './pages/UnitEconomicsPage';
 import { useWeeklySeries } from './hooks/useWeeklySeries';
 import { TrendChart }      from './components/TrendChart';
 
@@ -582,7 +583,7 @@ export default function App() {
       setCurrentView('brands');
       setActiveSection('brands');
       if (metricsRef.current) metricsRef.current.scrollTop = 0;
-    } else if (['orders','customers','operations','website','campaigns','marketplace','email','askbirch'].includes(sectionId)) {
+    } else if (['orders','customers','operations','website','campaigns','marketplace','email','askbirch','revenue'].includes(sectionId)) {
       setCurrentView(sectionId);
       setActiveSection(sectionId);
       setScrollTarget(null);
@@ -691,6 +692,7 @@ export default function App() {
             {currentView === 'marketplace' && <MarketplacePage data={data} onBack={goBack} scrollTarget={scrollTarget} />}
             {currentView === 'email'       && <EmailPage       data={data} onBack={goBack} scrollTarget={scrollTarget} />}
             {currentView === 'askbirch'    && <AskBirchPage    data={data} onBack={goBack} scrollTarget={scrollTarget} onViewChat={setChatSessionId} />}
+            {currentView === 'revenue'     && <UnitEconomicsPage onBack={goBack} />}
 
             {data && currentView === 'dashboard' && (
               <>
