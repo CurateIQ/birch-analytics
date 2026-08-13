@@ -1,8 +1,10 @@
 import https from 'https';
 import crypto from 'crypto';
 import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { S3Client, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 const dynamo = new DynamoDBClient({ region: 'us-east-1' });
+const s3 = new S3Client({ region: 'us-east-1' });
 const AI_TABLE = 'birch-ai-queries';
 
 // birch-ai edge worker — source of customer chat analytics (D1-backed).
@@ -204,6 +206,32 @@ async function shopifyRequest(token, store, normalizedPath, qs) {
   });
 }
 
+async function handleShopifyGraphQL(reqBody) {
+  const store = process.env.SHOPIFY_STORE;
+  if (!store) return err(500, 'Missing SHOPIFY_STORE');
+
+  const doRequest = (token) => httpsPost(
+    store,
+    '/admin/api/2025-01/graphql.json',
+    { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+    reqBody
+  );
+
+  let token = await getShopifyToken();
+  let result = await doRequest(token);
+
+  if (result.status === 401) {
+    console.log('Shopify GraphQL 401 — forcing token refresh');
+    cachedShopifyToken = null;
+    shopifyTokenExpiry = 1;
+    token = await getShopifyToken();
+    result = await doRequest(token);
+  }
+
+  if (result.status !== 200) return err(result.status, `Shopify GraphQL error: ${JSON.stringify(result.body)}`);
+  return ok(result.body);
+}
+
 async function handleShopify(subPath, queryString) {
   const store = process.env.SHOPIFY_STORE;
   const qs = queryString ? `?${queryString}` : '';
@@ -314,6 +342,50 @@ async function handleAI(body) {
   return ok(result.body);
 }
 
+// ── cost snapshot reader ──────────────────────────────────────────────────────
+
+async function handleCostSnapshots(queryString) {
+  const bucket = process.env.COST_SNAPSHOTS_BUCKET;
+  // If bucket not configured yet, return gracefully so the frontend can fall back.
+  if (!bucket) return ok({ snapshot: null, dates: [], estimatedOnly: true });
+
+  const params = new URLSearchParams(queryString);
+  const mode = params.get('mode');
+  const date = params.get('date');
+
+  try {
+    const listResult = await s3.send(new ListObjectsV2Command({ Bucket: bucket }));
+    const dates = (listResult.Contents || [])
+      .map(o => o.Key.replace('.json', ''))
+      .filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k))
+      .sort();
+
+    if (mode === 'list') return ok({ dates });
+
+    if (!dates.length) return ok({ snapshot: null, dates: [], estimatedOnly: true });
+
+    let targetDate;
+    if (mode === 'latest') {
+      targetDate = dates[dates.length - 1];
+    } else if (date) {
+      // Most recent snapshot on or before requested date; fall back to earliest.
+      const before = dates.filter(d => d <= date);
+      targetDate = before.length > 0 ? before[before.length - 1] : dates[0];
+    } else {
+      return err(400, 'Specify mode=list, mode=latest, or date=YYYY-MM-DD');
+    }
+
+    const obj = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: `${targetDate}.json` }));
+    const body = await obj.Body.transformToString();
+    const snapshot = JSON.parse(body);
+    return ok({ snapshot, date: targetDate, firstSnapshotDate: dates[0], estimatedOnly: false });
+  } catch (e) {
+    console.error('Cost snapshot read error:', e.message);
+    // Return gracefully so frontend falls back to live GraphQL.
+    return ok({ snapshot: null, dates: [], estimatedOnly: true, _error: e.message });
+  }
+}
+
 // ── main handler ──────────────────────────────────────────────────────────────
 
 // Static dashboard API key. Function-URL CORS already restricts browser
@@ -353,6 +425,17 @@ export const handler = async (event) => {
 
   if (rawPath.startsWith('/ai/session/')) {
     return handleChatTranscript(rawPath.replace('/ai/session/', ''));
+  }
+
+  if (rawPath === '/cost-snapshots') {
+    return handleCostSnapshots(queryString);
+  }
+
+  if (rawPath === '/shopify/graphql') {
+    let body;
+    try { body = typeof event.body === 'string' ? JSON.parse(event.body) : (event.body || {}); }
+    catch { return err(400, 'Invalid JSON body'); }
+    return handleShopifyGraphQL(body);
   }
 
   if (rawPath.startsWith('/shopify/')) {
