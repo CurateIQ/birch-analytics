@@ -188,7 +188,7 @@ export function CampaignsPage({ data, onBack }) {
   const metaConnected = meta?.connected === true;
 
   return (
-    <PageShell title="Campaigns" onBack={onBack}>
+    <PageShell title="Marketing" onBack={onBack}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
 
         {/* Google Ads — pending */}
