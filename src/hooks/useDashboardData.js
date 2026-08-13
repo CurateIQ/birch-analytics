@@ -26,6 +26,8 @@ import {
   fetchEngagementMetrics,
   fetchCartAbandonRate,
 } from '../api/ga4';
+import { fetchMetaCampaignPerformance } from '../api/metaAds';
+import { fetchCampaignAttribution, attributeCampaignsToAdPlatform } from '../api/attribution';
 
 const TZ = 'America/New_York';
 
@@ -97,6 +99,7 @@ export function useDashboardData() {
         klaviyoLists,
         ga4Traffic, ga4DailySessions, ga4LandingPages, ga4Engagement, ga4CartAbandon,
         opsDwelling, opsLate, aiQueries,
+        metaWeek, metaMonth, journeyWeek, journeyMonth,
       ] = await Promise.allSettled([
         fetchOrders(ranges.todayStart,     ranges.todayEnd),
         fetchOrders(ranges.yesterdayStart, ranges.yesterdayEnd),
@@ -119,6 +122,11 @@ export function useDashboardData() {
         fetchDwellingItems(),
         fetchLateDeliveries(),
         fetch(`${PROXY}/ai/queries?days=7&limit=25`, { headers: PROXY_HEADERS }).then(r => r.json()),
+        // Campaigns — Meta (live) + Shopify attribution
+        fetchMetaCampaignPerformance(ranges.weekStart, ranges.weekEnd),
+        fetchMetaCampaignPerformance(ranges.monthStart, ranges.monthEnd),
+        fetchCampaignAttribution(ranges.weekStart, ranges.weekEnd),
+        fetchCampaignAttribution(ranges.monthStart, ranges.monthEnd),
       ]);
 
       const r = (res, fb) => res.status === 'fulfilled' ? res.value : fb;
@@ -143,6 +151,35 @@ export function useDashboardData() {
       const dwelling     = r(opsDwelling,       []);
       const late         = r(opsLate,           []);
       const queries      = r(aiQueries,         { total: 0, topQueries: [], recent: [] });
+      const metaWk       = r(metaWeek,          { error: true, campaigns: [] });
+      const metaMo       = r(metaMonth,         { error: true, campaigns: [] });
+      const journeyWk    = r(journeyWeek,       []);
+      const journeyMo    = r(journeyMonth,      []);
+
+      // Meta campaigns joined to Shopify attribution — CAC = spend ÷ new customers,
+      // NOT Meta's self-reported conversions (see CampaignsPage CAC tooltip).
+      const joinedWeek  = attributeCampaignsToAdPlatform(metaWk.campaigns, journeyWk);
+      const joinedMonth = attributeCampaignsToAdPlatform(metaMo.campaigns, journeyMo);
+      const unmatchedCampaigns = [...new Set([...joinedWeek.unmatched, ...joinedMonth.unmatched])];
+      if (unmatchedCampaigns.length > 0) {
+        console.warn('Campaigns: UTM campaign(s) with attributed orders but no matching ad platform campaign name:', unmatchedCampaigns);
+      }
+
+      const aggregateMeta = (campaigns) => {
+        const spend       = campaigns.reduce((s, c) => s + (c.spend || 0), 0);
+        const clicks      = campaigns.reduce((s, c) => s + (c.clicks || 0), 0);
+        const impressions = campaigns.reduce((s, c) => s + (c.impressions || 0), 0);
+        const newCustomers = campaigns.reduce((s, c) => s + (c.newCustomerCount || 0), 0);
+        return {
+          spend,
+          cpc: clicks > 0 ? Math.round((spend / clicks) * 100) / 100 : null,
+          cpm: impressions > 0 ? Math.round((spend / (impressions / 1000)) * 100) / 100 : null,
+          cac: newCustomers > 0 ? Math.round((spend / newCustomers) * 100) / 100 : null,
+        };
+      };
+
+      const metaWeekTotals  = aggregateMeta(joinedWeek.campaigns);
+      const metaMonthTotals = aggregateMeta(joinedMonth.campaigns);
 
       // Weekly metrics
       const weekM    = calcOrderMetrics(wOrders);
@@ -246,6 +283,19 @@ export function useDashboardData() {
           topLandingPages: landingPg,
           // GA4 connected flag
           connected: traffic !== null,
+        },
+        campaigns: {
+          meta: {
+            connected: !metaWk.error,
+            campaigns7:  joinedWeek.campaigns,
+            campaigns30: joinedMonth.campaigns,
+            cpc7: metaWeekTotals.cpc,   cpm7: metaWeekTotals.cpm,   cac7: metaWeekTotals.cac,
+            cpc30: metaMonthTotals.cpc, cpm30: metaMonthTotals.cpm, cac30: metaMonthTotals.cac,
+            unmatched: unmatchedCampaigns,
+          },
+          google: {
+            connected: false,
+          },
         },
       });
 

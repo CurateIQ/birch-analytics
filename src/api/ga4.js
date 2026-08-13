@@ -172,6 +172,42 @@ export async function fetchCartAbandonRate(startDate, endDate) {
 }
 
 /**
+ * Fetch pre-purchase funnel stage counts for a single campaign, filtered by
+ * the sessionCampaignName dimension. Used for the Campaigns page drill-down —
+ * the purchase stage itself comes from Shopify attribution data, not GA4.
+ * Returns: { landing, pdp, cart, checkout }
+ */
+export async function fetchCampaignFunnel(campaignName, startDate, endDate) {
+  const report = await ga4Fetch({
+    dateRanges: [{ startDate: fmtDate(new Date(startDate)), endDate: fmtDate(new Date(endDate)) }],
+    dimensions: [{ name: 'eventName' }],
+    metrics: [{ name: 'eventCount' }],
+    dimensionFilter: {
+      andGroup: {
+        expressions: [
+          { filter: { fieldName: 'sessionCampaignName', stringFilter: { value: campaignName } } },
+          { filter: { fieldName: 'eventName', inListFilter: { values: ['session_start', 'view_item', 'add_to_cart', 'begin_checkout'] } } },
+        ],
+      },
+    },
+  });
+
+  const rows = report?.rows || [];
+  const counts = {};
+  rows.forEach(row => {
+    const name = row.dimensionValues?.[0]?.value;
+    counts[name] = parseInt(row.metricValues?.[0]?.value || '0', 10);
+  });
+
+  return {
+    landing:  counts['session_start'] || 0,
+    pdp:      counts['view_item'] || 0,
+    cart:     counts['add_to_cart'] || 0,
+    checkout: counts['begin_checkout'] || 0,
+  };
+}
+
+/**
  * Fetch overall engagement metrics for the week.
  * Returns: { avgSessionDuration, pagesPerSession, bounceRate, newUserPct }
  */

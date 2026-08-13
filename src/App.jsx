@@ -18,6 +18,7 @@ import { OrdersPage }      from './pages/OrdersPage';
 import { CustomersPage }   from './pages/CustomersPage';
 import { OperationsPage }  from './pages/OperationsPage';
 import { WebsitePage }     from './pages/WebsitePage';
+import { CampaignsPage }   from './pages/CampaignsPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { EmailPage }       from './pages/EmailPage';
 import { AskBirchPage }    from './pages/AskBirchPage';
@@ -581,7 +582,7 @@ export default function App() {
       setCurrentView('brands');
       setActiveSection('brands');
       if (metricsRef.current) metricsRef.current.scrollTop = 0;
-    } else if (['orders','customers','operations','website','marketplace','email','askbirch'].includes(sectionId)) {
+    } else if (['orders','customers','operations','website','campaigns','marketplace','email','askbirch'].includes(sectionId)) {
       setCurrentView(sectionId);
       setActiveSection(sectionId);
       setScrollTarget(null);
@@ -686,6 +687,7 @@ export default function App() {
             {currentView === 'customers'   && <CustomersPage   data={data} onBack={goBack} scrollTarget={scrollTarget} />}
             {currentView === 'operations'  && <OperationsPage  data={data} onBack={goBack} scrollTarget={scrollTarget} />}
             {currentView === 'website'     && <WebsitePage     data={data} onBack={goBack} scrollTarget={scrollTarget} />}
+            {currentView === 'campaigns'   && <CampaignsPage   data={data} onBack={goBack} />}
             {currentView === 'marketplace' && <MarketplacePage data={data} onBack={goBack} scrollTarget={scrollTarget} />}
             {currentView === 'email'       && <EmailPage       data={data} onBack={goBack} scrollTarget={scrollTarget} />}
             {currentView === 'askbirch'    && <AskBirchPage    data={data} onBack={goBack} scrollTarget={scrollTarget} onViewChat={setChatSessionId} />}

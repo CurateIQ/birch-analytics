@@ -290,6 +290,132 @@ async function handleGA4RunReport(reqBody) {
   return ok(result.body);
 }
 
+// ── Meta Marketing API ────────────────────────────────────────────────────────
+
+async function handleMetaInsights(queryString) {
+  const token = process.env.META_ACCESS_TOKEN;
+  const adAccountId = process.env.META_AD_ACCOUNT_ID;
+  if (!token || !adAccountId) return ok({ error: true, campaigns: [] });
+
+  try {
+    const params = new URLSearchParams(queryString);
+    const since = params.get('since');
+    const until = params.get('until');
+    const daily = params.get('time_increment') === '1';
+
+    const qs = new URLSearchParams({
+      fields: 'campaign_id,campaign_name,spend,impressions,clicks,actions',
+      level: 'campaign',
+      time_range: JSON.stringify({ since, until }),
+      limit: '500',
+    });
+    if (daily) qs.set('time_increment', '1');
+
+    const result = await httpsGet('graph.facebook.com', `/v21.0/${adAccountId}/insights?${qs.toString()}`, {
+      'Authorization': `Bearer ${token}`,
+    });
+
+    if (result.status !== 200 || result.body?.error) {
+      console.error('Meta insights error:', JSON.stringify(result.body));
+      return ok({ error: true, campaigns: [] });
+    }
+
+    const campaigns = (result.body?.data || []).map(row => {
+      const spend = parseFloat(row.spend || '0');
+      const impressions = parseInt(row.impressions || '0', 10);
+      const clicks = parseInt(row.clicks || '0', 10);
+      return {
+        campaignId: row.campaign_id,
+        campaignName: row.campaign_name,
+        date: row.date_start || null,
+        spend,
+        impressions,
+        clicks,
+        actions: row.actions || [],
+        cpc: clicks > 0 ? Math.round((spend / clicks) * 100) / 100 : null,
+        cpm: impressions > 0 ? Math.round((spend / (impressions / 1000)) * 100) / 100 : null,
+      };
+    });
+
+    return ok({ error: false, campaigns });
+  } catch (e) {
+    console.error('Meta insights exception:', e.message);
+    return ok({ error: true, campaigns: [] });
+  }
+}
+
+// ── Shopify orders journey (attribution) ──────────────────────────────────────
+
+async function shopifyGraphQL(store, token, query, variables) {
+  return httpsPost(
+    store,
+    '/admin/api/2025-01/graphql.json',
+    { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+    { query, variables }
+  );
+}
+
+const ORDERS_JOURNEY_QUERY = `
+  query OrdersJourney($searchQuery: String!, $cursor: String) {
+    orders(first: 100, after: $cursor, query: $searchQuery) {
+      pageInfo { hasNextPage endCursor }
+      edges {
+        node {
+          id
+          customer { numberOfOrders }
+          customerJourneySummary {
+            lastVisit { utmParameters { source medium campaign } }
+          }
+        }
+      }
+    }
+  }
+`;
+
+async function handleShopifyOrdersJourney(queryString) {
+  const store = process.env.SHOPIFY_STORE;
+  if (!store) return ok([]);
+
+  try {
+    const params = new URLSearchParams(queryString);
+    const start = params.get('start');
+    const end = params.get('end');
+    const searchQuery = `created_at:>=${start} AND created_at:<=${end}`;
+
+    const token = await getShopifyToken();
+    const orders = [];
+    let cursor = null;
+    let pages = 0;
+
+    do {
+      const result = await shopifyGraphQL(store, token, ORDERS_JOURNEY_QUERY, { searchQuery, cursor });
+      if (result.status !== 200 || result.body?.errors) {
+        console.error('Shopify orders-journey GraphQL error:', JSON.stringify(result.body?.errors || result.body));
+        break;
+      }
+      const edges = result.body?.data?.orders?.edges || [];
+      edges.forEach(({ node }) => {
+        const utm = node.customerJourneySummary?.lastVisit?.utmParameters;
+        orders.push({
+          orderId: node.id,
+          isNewCustomer: parseInt(node.customer?.numberOfOrders, 10) === 1,
+          utmSource: utm?.source || null,
+          utmMedium: utm?.medium || null,
+          utmCampaign: utm?.campaign || null,
+        });
+      });
+      const pageInfo = result.body?.data?.orders?.pageInfo;
+      cursor = pageInfo?.hasNextPage ? pageInfo.endCursor : null;
+      pages++;
+    } while (cursor && pages < 20);
+
+    return ok(orders);
+  } catch (e) {
+    console.error('Shopify orders-journey exception:', e.message);
+    return ok([]);
+  }
+}
+
 async function handleAI(body) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return err(500, 'Missing ANTHROPIC_API_KEY');
@@ -355,6 +481,10 @@ export const handler = async (event) => {
     return handleChatTranscript(rawPath.replace('/ai/session/', ''));
   }
 
+  if (rawPath === '/shopify/orders-journey') {
+    return handleShopifyOrdersJourney(queryString);
+  }
+
   if (rawPath.startsWith('/shopify/')) {
     return handleShopify(rawPath.replace('/shopify', ''), queryString);
   }
@@ -368,6 +498,10 @@ export const handler = async (event) => {
     try { body = typeof event.body === 'string' ? JSON.parse(event.body) : (event.body || {}); }
     catch { return err(400, 'Invalid JSON body'); }
     return handleGA4RunReport(body);
+  }
+
+  if (rawPath === '/meta/insights') {
+    return handleMetaInsights(queryString);
   }
 
   return err(404, `Route not found: ${rawPath}`);
