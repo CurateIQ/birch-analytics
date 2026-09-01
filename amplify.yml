@@ -6,6 +6,7 @@ frontend:
         - npm install
     build:
       commands:
+        - echo "REACT_APP_PROXY_KEY=$REACT_APP_PROXY_KEY" > .env
         - npm run build
   artifacts:
     baseDirectory: build
