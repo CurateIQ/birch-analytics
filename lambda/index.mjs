@@ -132,8 +132,9 @@ async function getShopifyToken() {
 
   if (!clientId || !clientSecret || !store) throw new Error('Missing Shopify credentials');
 
-  const result = await httpsPost(store, '/admin/oauth/access_token', { 'Content-Type': 'application/json' },
-    JSON.stringify({ client_id: clientId, client_secret: clientSecret, grant_type: 'client_credentials' })
+  const body = `grant_type=client_credentials&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}`;
+  const result = await httpsPost(store, '/admin/oauth/access_token', { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
   );
 
   console.log('Shopify token refresh status:', result.status, 'body keys:', Object.keys(result.body || {}));
@@ -254,7 +255,15 @@ async function handleShopify(subPath, queryString) {
     return err(result.status, `Shopify redirected to: ${result.headers?.location}`);
   }
   if (result.status !== 200) return err(result.status, `Shopify API error: ${JSON.stringify(result.body)}`);
-  return ok(result.body);
+
+  // Extract next_page_info from Shopify Link header so the frontend can paginate.
+  const linkHeader = result.headers?.link || '';
+  const match = linkHeader.match(/<[^>]*[?&]page_info=([^& >]+)[^>]*>;\s*rel="next"/);
+  const nextPageInfo = match ? decodeURIComponent(match[1]) : null;
+  const responseBody = nextPageInfo
+    ? { ...result.body, next_page_info: nextPageInfo }
+    : result.body;
+  return ok(responseBody);
 }
 
 async function handleVeeqo(subPath, queryString) {
