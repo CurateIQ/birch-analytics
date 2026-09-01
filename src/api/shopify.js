@@ -43,7 +43,7 @@ export async function fetchOrders(startDate, endDate, limit = 250) {
 // Collective vendor set (duplicated here for classification; collectiveMargin.js is the source of truth for margin calcs)
 const COLLECTIVE_VENDORS_SET = new Set([
   "Apple Park & Organic Farm Buddies", "DYPER", "L'ovedbaby",
-  "Makemake Organics", "Parasol Co", "ezpz",
+  "Makemake Organics", "Parasol Co", "ezpz", "babybay",
 ]);
 
 /**
@@ -223,13 +223,28 @@ export function calcCustomerMetrics(newCustomers, orders) {
   return { newCustomerCount: newCustomers.length, newOrdersPct: newPct, returningOrdersPct: 100 - newPct };
 }
 
-export async function fetchProducts(limit = 250) {
-  const data = await shopifyFetch('/products', {
-    limit,
+export async function fetchProducts() {
+  let allProducts = [];
+  let pageInfo = null;
+
+  const firstData = await shopifyFetch('/products', {
+    limit: 250,
     fields: 'id,title,vendor,product_type,variants,published_at',
     published_status: 'published',
   });
-  return data.products || [];
+  allProducts = allProducts.concat(firstData.products || []);
+  pageInfo = firstData.next_page_info || null;
+
+  while (pageInfo) {
+    const nextData = await shopifyFetch('/products', {
+      limit: 250,
+      page_info: pageInfo,
+    });
+    allProducts = allProducts.concat(nextData.products || []);
+    pageInfo = nextData.next_page_info || null;
+  }
+
+  return allProducts;
 }
 
 export function calcCatalogMetrics(products) {
@@ -256,9 +271,18 @@ export async function fetchFulfillmentMetrics(startDate, endDate) {
   return { avgFulfillmentDays: avg };
 }
 
-export function calcNewBrands(currentProducts, prevProducts) {
-  const prevBrands = new Set(prevProducts.map(p => p.vendor));
-  return [...new Set(currentProducts.map(p => p.vendor))].filter(b => !prevBrands.has(b)).length;
+export function calcNewBrands(products, days = 7) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const brandFirstSeen = {};
+  for (const p of products) {
+    if (!p.vendor || !p.published_at) continue;
+    const publishedAt = new Date(p.published_at);
+    if (!brandFirstSeen[p.vendor] || publishedAt < brandFirstSeen[p.vendor]) {
+      brandFirstSeen[p.vendor] = publishedAt;
+    }
+  }
+  return Object.values(brandFirstSeen).filter(date => date >= cutoff).length;
 }
 
 export function calcWoWChange(current, previous) {

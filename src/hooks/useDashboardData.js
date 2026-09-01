@@ -193,7 +193,7 @@ export function useDashboardData() {
       const gmvByBrand    = calcGMVByBrand(wOrders);
       const gmvByCategory = calcGMVByCategory(wOrders);
       const catalogM         = calcCatalogMetrics(prods);
-      const newBrands        = calcNewBrands(prods, prods);
+      const newBrands        = calcNewBrands(prods);
       const brandConc        = calcBrandConcentration(gmvByBrand);
       const catalogByCategory = calcCatalogByCategory(prods);
       const custM         = calcCustomerMetrics(wCusts, wOrders);

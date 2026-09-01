@@ -24,6 +24,7 @@ export const COLLECTIVE_VENDORS = new Set([
   "Makemake Organics",
   "Parasol Co",
   "ezpz",
+  "babybay", // TODO: verify exact vendor string from a live babybay order in Shopify
 ]);
 
 // Launch date — first full Monday on/after site launch mid-June 2026.
@@ -31,7 +32,8 @@ export const LAUNCH_DATE = '2026-06-12T00:00:00.000Z';
 
 function isCollectiveItem(item) {
   return COLLECTIVE_VENDORS.has(item.vendor) ||
-    Boolean(item.fulfillment_service?.includes('shopify-collective'));
+    Boolean(item.fulfillment_service?.includes('shopify-collective')) ||
+    Boolean(item.fulfillment_service?.includes('shipturtle')); // TODO: verify exact fulfillment_service string from a live babybay order
 }
 
 function buildSkuLookup(items) {
@@ -345,8 +347,13 @@ export async function fetchCollectiveMarginData() {
     }
   }
 
-  // By vendor (whole period since launch).
-  const byVendor = [...COLLECTIVE_VENDORS].map(vendor => {
+  // By vendor (whole period since launch) — dynamic: includes any vendor that
+  // actually appears in orders, not just the hardcoded set.
+  const allVendorsInOrders = [...new Set(
+    collectiveOrders.flatMap(o => o.vendors || [])
+  )];
+  const vendorsToShow = [...new Set([...COLLECTIVE_VENDORS, ...allVendorsInOrders])];
+  const byVendor = vendorsToShow.map(vendor => {
     const vendorOrders = collectiveOrders.filter(o => o.vendors.includes(vendor));
     const agg = aggregateOrders(vendorOrders);
     return { vendor, ...agg };
