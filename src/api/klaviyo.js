@@ -30,6 +30,6 @@ export async function fetchListMetrics() {
     };
   } catch (err) {
     console.error('Klaviyo fetch error:', err);
-    return { totalLists: 0, totalProfiles: 0, lists: [] };
+    return { error: true, totalLists: null, totalProfiles: null, lists: [] };
   }
 }

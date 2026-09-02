@@ -24,7 +24,7 @@ export const COLLECTIVE_VENDORS = new Set([
   "Makemake Organics",
   "Parasol Co",
   "ezpz",
-  "babybay", // TODO: verify exact vendor string from a live babybay order in Shopify
+  "Babybay", // verified: exact vendor string from live Shopify orders (220 orders as of 2026-09-01)
 ]);
 
 // Launch date — first full Monday on/after site launch mid-June 2026.
@@ -32,8 +32,8 @@ export const LAUNCH_DATE = '2026-06-12T00:00:00.000Z';
 
 function isCollectiveItem(item) {
   return COLLECTIVE_VENDORS.has(item.vendor) ||
-    Boolean(item.fulfillment_service?.includes('shopify-collective')) ||
-    Boolean(item.fulfillment_service?.includes('shipturtle')); // TODO: verify exact fulfillment_service string from a live babybay order
+    Boolean(item.fulfillment_service?.includes('shopify-collective'));
+  // Note: "shipturtle" was never found in any live order's fulfillment_service — removed
 }
 
 function buildSkuLookup(items) {
@@ -193,7 +193,7 @@ function computeOrderMargin(order, skuLookup) {
 
   return {
     orderId: order.id,
-    orderDate: order.created_at.slice(0, 10),
+    orderDate: new Date(order.created_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
     vendor: collectiveItems[0]?.vendor || 'Unknown',
     vendors: [...new Set(collectiveItems.map(i => i.vendor))],
     revenueGross: Math.round(revenueGross * 100) / 100,
@@ -256,6 +256,7 @@ function aggregateOrders(orders) {
 export async function fetchCollectiveMarginData() {
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const toETDate = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
   // Parallelise cost lookup and order fetch.
   const [costData, allOrders] = await Promise.all([
@@ -282,7 +283,7 @@ export async function fetchCollectiveMarginData() {
     : 100;
 
   // KPI — rolling 7 days.
-  const recent7 = collectiveOrders.filter(o => o.orderDate >= sevenDaysAgo.toISOString().slice(0, 10));
+  const recent7 = collectiveOrders.filter(o => o.orderDate >= toETDate(sevenDaysAgo));
   const kpi = aggregateOrders(recent7);
 
   // Daily — last 7 complete days.
@@ -290,7 +291,7 @@ export async function fetchCollectiveMarginData() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = toETDate(d);
     const dayOrders = collectiveOrders.filter(o => o.orderDate === dateStr);
     const agg = aggregateOrders(dayOrders);
     daily7.push({
@@ -368,5 +369,6 @@ export async function fetchCollectiveMarginData() {
     firstSnapshotDate,
     isLiveFallback,
     coveredRevenuePct,
+    shopifyOrderCount: allOrders.length,
   };
 }

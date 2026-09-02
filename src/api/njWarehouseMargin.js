@@ -190,7 +190,7 @@ function computeOrderMargin(order, skuLookup, shippingCost) {
 
   return {
     orderId:          order.id,
-    orderDate:        order.created_at.slice(0, 10),
+    orderDate:        new Date(order.created_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
     revenueGross:     Math.round(revenueGross * 100) / 100,
     revenueNet:       Math.round(revenueNet * 100) / 100,
     cogs:             Math.round(cogs * 100) / 100,
@@ -251,6 +251,7 @@ function aggregateOrders(orders) {
 export async function fetchNJWarehouseMarginData() {
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const toETDate = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
   const [costData, allOrders, veeqoData] = await Promise.all([
     loadCostLookup(),
@@ -259,7 +260,7 @@ export async function fetchNJWarehouseMarginData() {
   ]);
 
   const { skuLookup, snapshotDate, firstSnapshotDate, isLiveFallback } = costData;
-  const { shippingCosts, njOrderNames } = veeqoData;
+  const { shippingCosts, njOrderNames, partial: veeqoPartial, error: veeqoError } = veeqoData;
   const isVeeqoFallback = njOrderNames.size === 0;
 
   const njOrders = allOrders
@@ -282,7 +283,7 @@ export async function fetchNJWarehouseMarginData() {
     : 0;
 
   // KPI — rolling 7 days
-  const recent7 = njOrders.filter(o => o.orderDate >= sevenDaysAgo.toISOString().slice(0, 10));
+  const recent7 = njOrders.filter(o => o.orderDate >= toETDate(sevenDaysAgo));
   const kpi = aggregateOrders(recent7);
 
   // Daily — last 7 complete days
@@ -290,7 +291,7 @@ export async function fetchNJWarehouseMarginData() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = toETDate(d);
     const agg = aggregateOrders(njOrders.filter(o => o.orderDate === dateStr));
     daily7.push({
       label:    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }),
@@ -380,7 +381,10 @@ export async function fetchNJWarehouseMarginData() {
     firstSnapshotDate,
     isLiveFallback,
     isVeeqoFallback,
+    isVeeqoPartial: veeqoPartial || false,
+    veeqoPartialError: veeqoError || null,
     coveredRevenuePct,
     shippingCoveredPct,
+    shopifyOrderCount: allOrders.length,
   };
 }

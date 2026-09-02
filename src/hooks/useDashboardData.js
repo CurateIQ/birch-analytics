@@ -142,7 +142,7 @@ export function useDashboardData() {
       const prods    = r(currentProducts,   []);
       const refunds  = r(refundData,        { returnRate: 0, refundCount: 0 });
       const fulfill  = r(fulfillmentData,   { avgFulfillmentDays: null });
-      const klaviyo  = r(klaviyoLists,      { totalProfiles: 0, lists: [] });
+      const klaviyo  = r(klaviyoLists,      { error: true, totalProfiles: null, lists: [] });
       const traffic      = r(ga4Traffic,        null);
       const dailySess    = r(ga4DailySessions,  []);
       const landingPg    = r(ga4LandingPages,   []);
@@ -265,6 +265,7 @@ export function useDashboardData() {
         },
         email: {
           totalListSize: klaviyo.totalProfiles,
+          klaviyoError:  klaviyo.error || false,
           lists:         klaviyo.lists,
         },
         website: {

@@ -341,6 +341,11 @@ function CollectiveSection() {
         <div style={{ fontSize: 9, color: '#C8BFB0', marginTop: 6 }}>
           Since launch · Margin % Net below 15% highlighted red · Shipping = $0 · Processing fee = 2.25% + $0.30/order
         </div>
+        {result.shopifyOrderCount != null && (
+          <div style={{ fontSize: 10, color: '#8C8A85', marginTop: 6, fontFamily: 'DM Mono, monospace' }}>
+            Dashboard Collective orders (filtered): {result.byVendor.reduce((s, r) => s + (r.orderCount || 0), 0)} · Shopify total orders since launch: {result.shopifyOrderCount}
+          </div>
+        )}
       </div>
       <div style={{ height: 40 }} />
     </>
@@ -388,8 +393,16 @@ function NJWarehouseSection() {
         {result.isVeeqoFallback && (
           <div style={{ fontSize: 10, color: '#854F0B', marginTop: 6 }}>⚠ Veeqo returned no orders — using fulfillment_service to identify NJ Warehouse orders (JIT orders may be included)</div>
         )}
+        {result.isVeeqoPartial && (
+          <div style={{ fontSize: 10, color: '#854F0B', marginTop: 6 }}>⚠ Shipping data incomplete — Veeqo fetch failed mid-pagination. Margin may be overstated for orders in the missing pages.</div>
+        )}
         {result.coveredRevenuePct < 80 && (
           <div style={{ fontSize: 10, color: '#854F0B', marginTop: 4 }}>⚠ Low COGS coverage — populate unit costs in Shopify admin to improve margin accuracy</div>
+        )}
+        {result.shopifyOrderCount != null && (
+          <div style={{ fontSize: 10, color: '#8C8A85', marginTop: 6, fontFamily: 'DM Mono, monospace' }}>
+            Dashboard NJ orders: {result.kpi.orderCount ?? '…'} (7d) · Shopify total orders since launch: {result.shopifyOrderCount}
+          </div>
         )}
       </div>
 

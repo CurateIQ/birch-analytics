@@ -3,10 +3,11 @@
  * Google Analytics 4 Data API — routed through the birch-api-proxy Lambda.
  * Pulls website traffic & source data for birchstore.com.
  *
- * Required environment variables (set in AWS Amplify):
- *   REACT_APP_GA4_PROPERTY_ID   = 538994991
- *   REACT_APP_GA4_CLIENT_EMAIL  = birch-metrics-dashboard@birch-analytics.iam.gserviceaccount.com
- *   REACT_APP_GA4_PRIVATE_KEY   = <private_key from JSON, with \n preserved>
+ * Required environment variables:
+ *   Frontend (Amplify build env):  REACT_APP_GA4_PROPERTY_ID  = 538994991
+ *   Lambda only (never frontend):  GA4_CLIENT_EMAIL, GA4_PRIVATE_KEY
+ *   (service account credentials must NOT be set as REACT_APP_* vars — they would be
+ *    compiled into the public JS bundle; set them only in Lambda env vars)
  *
  * The Lambda proxy forwards requests to the GA4 Data API using the service account credentials.
  */

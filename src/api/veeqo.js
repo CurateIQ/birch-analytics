@@ -46,7 +46,7 @@ export async function fetchVeeqoData(sinceDate) {
       });
     } catch (e) {
       console.warn('Veeqo fetch failed (page', page, '):', e.message);
-      break;
+      return { shippingCosts, njOrderNames, partial: true, error: e.message };
     }
 
     if (!Array.isArray(orders) || orders.length === 0) break;
@@ -70,5 +70,5 @@ export async function fetchVeeqoData(sinceDate) {
     if (page > 50) break; // safety cap
   }
 
-  return { shippingCosts, njOrderNames };
+  return { shippingCosts, njOrderNames, partial: false };
 }

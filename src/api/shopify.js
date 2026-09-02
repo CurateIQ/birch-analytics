@@ -56,7 +56,7 @@ export async function fetchOrders(startDate, endDate, limit = 250) {
 // Collective vendor set (duplicated here for classification; collectiveMargin.js is the source of truth for margin calcs)
 const COLLECTIVE_VENDORS_SET = new Set([
   "Apple Park & Organic Farm Buddies", "DYPER", "L'ovedbaby",
-  "Makemake Organics", "Parasol Co", "ezpz", "babybay",
+  "Makemake Organics", "Parasol Co", "ezpz", "Babybay",
 ]);
 
 /**
@@ -437,22 +437,11 @@ async function fetchBrandHealth(days) {
   const windowStart = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   const prevStart   = new Date(now.getTime() - 2 * days * 24 * 60 * 60 * 1000);
 
-  const [currData, prevData] = await Promise.all([
-    shopifyFetch('/orders', {
-      status: 'any',
-      created_at_min: windowStart.toISOString(),
-      created_at_max: now.toISOString(),
-      limit: 250,
-      fields: 'id,created_at,total_price,line_items,financial_status,cancel_reason,fulfillments',
-    }),
-    shopifyFetch('/orders', {
-      status: 'any',
-      created_at_min: prevStart.toISOString(),
-      created_at_max: windowStart.toISOString(),
-      limit: 250,
-      fields: 'id,created_at,total_price,line_items,financial_status,cancel_reason,fulfillments',
-    }),
+  const [currOrders, prevOrders] = await Promise.all([
+    fetchOrders(windowStart.toISOString(), now.toISOString()),
+    fetchOrders(prevStart.toISOString(), windowStart.toISOString()),
   ]);
+  const [currData, prevData] = [{ orders: currOrders }, { orders: prevOrders }];
 
   function calcMetrics(orders) {
     const brands = {};
