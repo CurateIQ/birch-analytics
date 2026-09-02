@@ -57,6 +57,12 @@ export async function fetchOrders(startDate, endDate, limit = 250) {
 const COLLECTIVE_VENDORS_SET = new Set([
   "Apple Park & Organic Farm Buddies", "DYPER", "L'ovedbaby",
   "Makemake Organics", "Parasol Co", "ezpz", "Babybay",
+  "Dabble & Dollop®", "Hegen USA", "Lalo", "Green Toys", "mushie",
+  "Oli & Carol", "Re-Play", "Solly Baby", "PlanToys",
+  "Earth Mama", "Earth Mama Organics", "Pipette", "Holle USA", "Natursutten",
+  "The Honest Company", "Ryan & Rose", "Pigeon", "Sassy Toys",
+  "Colored Organics", "Lansinoh", "Mother Mother", "OXO",
+  "LILLEbaby", "Eric Carle", "Moby", "Snuggle Me Organic", "Freshly Picked",
 ]);
 
 /**
