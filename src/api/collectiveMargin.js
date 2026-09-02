@@ -18,42 +18,14 @@ import { fetchOrders } from './shopify';
 import { mondayOf, listWeeks, weekBounds, formatWeekLabel, formatWeekRange } from '../utils/weeks';
 
 export const COLLECTIVE_VENDORS = new Set([
-  // Auto-detected via fulfillment_service too, but listed for cost lookup
+  // Verified from Shopify Collective Suppliers page (Connected tab)
   "Apple Park & Organic Farm Buddies",
   "DYPER",
   "L'ovedbaby",
   "Makemake Organics",
   "Parasol Co",
   "ezpz",
-  // Manual fulfillment_service — must be vendor-matched
-  "Babybay",
-  "Dabble & Dollop®", // ® U+00AE
-  "Hegen USA",
-  "Lalo",
-  "Green Toys",
-  "mushie",
-  "Oli & Carol",
-  "Re-Play",
-  "Solly Baby",
-  "PlanToys",
-  "Earth Mama",
-  "Earth Mama Organics",
-  "Pipette",
-  "Holle USA",
-  "Natursutten",
-  "The Honest Company",
-  "Ryan & Rose",
-  "Pigeon",
-  "Sassy Toys",
-  "Colored Organics",
-  "Lansinoh",
-  "Mother Mother",
-  "OXO",
-  "LILLEbaby",
-  "Eric Carle",
-  "Moby",
-  "Snuggle Me Organic",
-  "Freshly Picked",
+  "Lovevery", // connected Aug 26 2026; new orders also auto-detect via fulfillment_service
 ]);
 
 // Launch date — first full Monday on/after site launch mid-June 2026.
