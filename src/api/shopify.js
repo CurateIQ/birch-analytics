@@ -30,14 +30,27 @@ export function getPrevDateRange(days = 7) {
 }
 
 export async function fetchOrders(startDate, endDate, limit = 250) {
-  const data = await shopifyFetch('/orders', {
+  const fields = 'id,name,created_at,total_price,line_items,financial_status,fulfillment_status,cancel_reason,customer,fulfillments';
+  let allOrders = [];
+  let pageInfo = null;
+
+  const firstData = await shopifyFetch('/orders', {
     status: 'any',
     created_at_min: startDate,
     created_at_max: endDate,
     limit,
-    fields: 'id,name,created_at,total_price,line_items,financial_status,fulfillment_status,cancel_reason,customer,fulfillments',
+    fields,
   });
-  return data.orders || [];
+  allOrders = allOrders.concat(firstData.orders || []);
+  pageInfo = firstData.next_page_info || null;
+
+  while (pageInfo) {
+    const nextData = await shopifyFetch('/orders', { limit, page_info: pageInfo });
+    allOrders = allOrders.concat(nextData.orders || []);
+    pageInfo = nextData.next_page_info || null;
+  }
+
+  return allOrders;
 }
 
 // Collective vendor set (duplicated here for classification; collectiveMargin.js is the source of truth for margin calcs)
