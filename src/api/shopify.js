@@ -59,6 +59,7 @@ const COLLECTIVE_VENDORS_SET = new Set([
   "Apple Park & Organic Farm Buddies", "DYPER", "L'ovedbaby",
   "Makemake Organics", "Parasol Co", "ezpz",
   "Lovevery", // connected Aug 26 2026
+  "Babybay",  // Shipturtle dropship partner
 ]);
 
 /**

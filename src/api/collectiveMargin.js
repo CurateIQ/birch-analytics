@@ -26,6 +26,7 @@ export const COLLECTIVE_VENDORS = new Set([
   "Parasol Co",
   "ezpz",
   "Lovevery", // connected Aug 26 2026; new orders also auto-detect via fulfillment_service
+  "Babybay",  // Shipturtle dropship partner (not Collective, but same margin treatment)
 ]);
 
 // Launch date — first full Monday on/after site launch mid-June 2026.
