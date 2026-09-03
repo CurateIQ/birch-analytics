@@ -194,9 +194,11 @@ function computeOrderMargin(order, skuLookup) {
 
   return {
     orderId: order.id,
+    orderName: order.name,
     orderDate: new Date(order.created_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
     vendor: collectiveItems[0]?.vendor || 'Unknown',
     vendors: [...new Set(collectiveItems.map(i => i.vendor))],
+    skus: collectiveItems.flatMap(i => i.sku ? [i.sku] : (i.title ? [i.title] : [])),
     revenueGross: Math.round(revenueGross * 100) / 100,
     revenueNet: Math.round(revenueNet * 100) / 100,
     cogs: Math.round(cogs * 100) / 100,
@@ -370,6 +372,12 @@ export async function fetchCollectiveMarginData() {
     isLiveFallback,
     excludedCount,
     excludedGMV,
+    excludedOrders: noCOGSOrders.map(o => ({
+      orderName: o.orderName,
+      vendor:    o.vendor,
+      skus:      o.skus || [],
+      gmv:       o.revenueGross,
+    })),
     streamOrderCount,
     shopifyOrderCount: allOrders.length,
   };

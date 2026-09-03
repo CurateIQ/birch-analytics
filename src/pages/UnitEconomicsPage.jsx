@@ -108,23 +108,105 @@ const KPI_GROUP_LABEL = {
 
 // ── COGS exclusion footnote — shown on every KPI/chart section when count > 0 ─
 
-function ExclusionNote({ count, gmv }) {
-  if (!count) return null;
-  const usd = v => `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+function ExclusionModal({ orders, onClose }) {
+  const usdFmt = v => `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return (
-    <div style={{
-      padding: '8px 12px', background: '#FEF3E2',
-      border: '1px solid #F5A623', borderRadius: 7,
-      fontSize: 12, color: '#7A4A00', marginBottom: 14,
-      display: 'flex', alignItems: 'center', gap: 8,
-    }}>
-      <span style={{ fontSize: 16 }}>⚠</span>
-      <span>
-        <strong>{count} order{count !== 1 ? 's' : ''} with {usd(gmv)} GMV excluded</strong> — COGS not available.
-        These orders are not included in any revenue or margin figure above.
-        Upload cost data to include them.
-      </span>
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#FFFFFF', borderRadius: 12, width: '92%', maxWidth: 520,
+          maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+          border: '0.5px solid #E0DDD6',
+        }}
+      >
+        {/* Header */}
+        <div style={{ padding: '14px 16px 10px', borderBottom: '0.5px solid #F0EDE6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#3D3226' }}>
+              Excluded Orders — No COGS
+            </div>
+            <div style={{ fontSize: 11, color: '#8C8A85', marginTop: 2 }}>
+              {orders.length} order{orders.length !== 1 ? 's' : ''} not included in margin calculations
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#8C8A85', lineHeight: 1, padding: 4 }}
+          >
+            ×
+          </button>
+        </div>
+        {/* Table */}
+        <div style={{ overflowY: 'auto', padding: '10px 16px 14px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr>
+                <th style={{ ...TH, textAlign: 'left', paddingBottom: 8 }}>Order</th>
+                <th style={{ ...TH, textAlign: 'left', paddingBottom: 8 }}>Supplier</th>
+                <th style={{ ...TH, textAlign: 'left', paddingBottom: 8 }}>SKUs</th>
+                <th style={{ ...TH, textAlign: 'right', paddingRight: 0, paddingBottom: 8 }}>GMV</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((o, i) => (
+                <tr key={i}>
+                  <td style={{ ...TD, color: '#3D3226', fontWeight: 600, paddingRight: 10, whiteSpace: 'nowrap', fontFamily: 'DM Mono, monospace' }}>{o.orderName}</td>
+                  <td style={{ ...TD, color: '#5F5E5A', paddingRight: 10, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={o.vendor}>{o.vendor}</td>
+                  <td style={{ ...TD, color: '#8C8A85', paddingRight: 10 }}>
+                    {o.skus.length > 0 ? o.skus.slice(0, 3).join(', ') + (o.skus.length > 3 ? ` +${o.skus.length - 3}` : '') : '—'}
+                  </td>
+                  <td style={{ ...TD, textAlign: 'right', fontFamily: 'DM Mono, monospace', whiteSpace: 'nowrap' }}>{usdFmt(o.gmv)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding: '8px 16px 12px', borderTop: '0.5px solid #F0EDE6', fontSize: 10, color: '#C8BFB0' }}>
+          Upload cost data in the Manual Wholesale tab to include these orders in margin calculations.
+        </div>
+      </div>
     </div>
+  );
+}
+
+function ExclusionNote({ count, gmv, orders }) {
+  const [open, setOpen] = useState(false);
+  if (!count) return null;
+  const usdFmt = v => `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return (
+    <>
+      <div
+        onClick={() => setOpen(true)}
+        style={{
+          padding: '8px 12px', background: '#FEF3E2',
+          border: '1px solid #F5A623', borderRadius: 7,
+          fontSize: 12, color: '#7A4A00', marginBottom: 14,
+          display: 'flex', alignItems: 'center', gap: 8,
+          cursor: orders?.length ? 'pointer' : 'default',
+        }}
+      >
+        <span style={{ fontSize: 16 }}>⚠</span>
+        <span>
+          <strong style={orders?.length ? { textDecoration: 'underline dotted', textUnderlineOffset: 2 } : {}}>
+            {count} order{count !== 1 ? 's' : ''} with {usdFmt(gmv)} GMV excluded
+          </strong> — COGS not available.
+          These orders are not included in any revenue or margin figure above.{' '}
+          {orders?.length ? <span style={{ opacity: 0.75 }}>Click to see list.</span> : null}
+        </span>
+      </div>
+      {open && orders?.length && (
+        <ExclusionModal orders={orders} onClose={() => setOpen(false)} />
+      )}
+    </>
   );
 }
 
@@ -316,7 +398,7 @@ function CollectiveSection() {
   ];
   const dailyLegend = [{ label: 'Gross', color: GROSS_COLOR }, { label: 'Net', color: NET_COLOR }];
 
-  const exclusionNote = <ExclusionNote count={result.excludedCount} gmv={result.excludedGMV} />;
+  const exclusionNote = <ExclusionNote count={result.excludedCount} gmv={result.excludedGMV} orders={result.excludedOrders} />;
 
   return (
     <>
@@ -418,7 +500,7 @@ function NJWarehouseSection() {
     ...(hasEstimatedWeeks ? [{ label: 'Estimated', color: '#C8BFB0', dashed: true }] : []),
   ];
   const dailyLegend = [{ label: 'Gross', color: GROSS_COLOR }, { label: 'Net', color: NET_COLOR }];
-  const exclusionNote = <ExclusionNote count={result.excludedCount} gmv={result.excludedGMV} />;
+  const exclusionNote = <ExclusionNote count={result.excludedCount} gmv={result.excludedGMV} orders={result.excludedOrders} />;
 
   return (
     <>
@@ -758,7 +840,7 @@ function ManualWholesaleSection() {
 
       {result && (
         <>
-          <ExclusionNote count={result.excludedCount} gmv={result.excludedGMV} />
+          <ExclusionNote count={result.excludedCount} gmv={result.excludedGMV} orders={result.excludedOrders} />
 
           <SectionLabel>Rolling 7 Days</SectionLabel>
           <KPIRow result={result} />
