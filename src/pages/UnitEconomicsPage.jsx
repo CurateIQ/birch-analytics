@@ -582,7 +582,7 @@ function ParsedPreview({ vendor, parsed, onConfirm, onDiscard, saving }) {
 
   const rows = vendor === 'babybay'
     ? (parsed.rows || [])
-    : parsed.orderId ? [{ orderId: parsed.orderId, cost: parsed.total, orderDate: '' }] : [];
+    : parsed.orderId ? [{ orderId: parsed.orderId, cost: parsed.cost, orderDate: '' }] : [];
 
   const usdFmt = v => `$${Number(v).toFixed(2)}`;
 

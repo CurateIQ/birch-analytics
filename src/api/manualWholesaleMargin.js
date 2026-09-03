@@ -43,8 +43,8 @@ export async function fetchManualWholesaleCosts() {
  * orderId should be the Shopify order name number (e.g. "1347", not "#1347").
  */
 export async function saveManualWholesaleCosts(rows) {
-  const res = await fetch(`${PROXY}/manual-wholesale/costs`, {
-    method: 'PUT',
+  const res = await fetch(`${PROXY}/manual-wholesale/costs/save`, {
+    method: 'POST',
     headers: { ...PROXY_HEADERS, 'Content-Type': 'application/json' },
     body: JSON.stringify({ rows }),
   });

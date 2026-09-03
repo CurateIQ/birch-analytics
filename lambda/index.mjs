@@ -595,7 +595,7 @@ async function handleManualWholesaleParse(rawBody) {
   if (vendor === 'babybay') {
     prompt = 'This is a BabyBay weekly settlement invoice. Extract all order rows. Return JSON only (no explanation): { "rows": [ { "orderId": "1132", "cost": 54.19, "orderDate": "2026-08-07" } ] }. orderId = Order ID column (number as string). cost = Net Payout column (number). orderDate = YYYY-MM-DD.';
   } else if (vendor === 'naturepedic') {
-    prompt = 'This is a Naturepedic order confirmation. Extract: PO # (= Shopify order number) and Total (what Birch owes, including shipping + tax). Return JSON only: { "orderId": "1347", "cost": 262.51 }. orderId = PO # field. cost = Total amount (number, no $ sign).';
+    prompt = 'This is a Naturepedic order confirmation. Extract: (1) PO # field — this is the Shopify order number, (2) the Total dollar amount — what Birch owes, which includes items, discounts, shipping, and tax. Return JSON only, no explanation: { "orderId": "1347", "cost": 262.51 }. orderId = the PO # field value (string). cost = the Total amount (number, no $ sign, no commas).';
   } else {
     return err(400, `Unknown vendor: ${vendor}`);
   }
@@ -709,10 +709,11 @@ export const handler = async (event) => {
   }
 
   if (rawPath === '/manual-wholesale/costs') {
-    if (event.requestContext?.http?.method === 'PUT' || event.httpMethod === 'PUT') {
-      return handleManualWholesaleCostsPut(event.body || '{}');
-    }
     return handleManualWholesaleCostsGet();
+  }
+
+  if (rawPath === '/manual-wholesale/costs/save') {
+    return handleManualWholesaleCostsPut(event.body || '{}');
   }
 
   if (rawPath === '/manual-wholesale/parse') {
