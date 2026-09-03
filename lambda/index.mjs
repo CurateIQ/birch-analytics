@@ -1,7 +1,7 @@
 import https from 'https';
 import crypto from 'crypto';
 import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
-import { S3Client, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 const dynamo = new DynamoDBClient({ region: 'us-east-1' });
 const s3 = new S3Client({ region: 'us-east-1' });
@@ -533,6 +533,102 @@ async function handleCostSnapshots(queryString) {
   }
 }
 
+// ── manual wholesale cost storage (S3, same bucket as cost-snapshots) ─────────
+
+const MW_KEY = 'manual-wholesale/costs.json';
+
+async function getMWCosts() {
+  const bucket = process.env.COST_SNAPSHOTS_BUCKET;
+  if (!bucket) return {};
+  try {
+    const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: MW_KEY }));
+    const body = await res.Body.transformToString();
+    return JSON.parse(body);
+  } catch (e) {
+    if (e.name === 'NoSuchKey') return {};
+    throw e;
+  }
+}
+
+async function putMWCosts(data) {
+  const bucket = process.env.COST_SNAPSHOTS_BUCKET;
+  if (!bucket) throw new Error('COST_SNAPSHOTS_BUCKET not configured');
+  await s3.send(new PutObjectCommand({
+    Bucket: bucket, Key: MW_KEY,
+    Body: JSON.stringify(data),
+    ContentType: 'application/json',
+  }));
+}
+
+async function handleManualWholesaleCostsGet() {
+  const data = await getMWCosts();
+  return ok(data);
+}
+
+async function handleManualWholesaleCostsPut(rawBody) {
+  const { rows } = JSON.parse(rawBody);
+  if (!Array.isArray(rows)) return err(400, 'rows must be an array');
+  const existing = await getMWCosts();
+  for (const row of rows) {
+    if (!row.orderId || row.cost == null) continue;
+    existing[String(row.orderId)] = {
+      cost:    parseFloat(row.cost),
+      vendor:  row.vendor,
+      source:  row.source,
+      date:    row.date,
+      savedAt: new Date().toISOString(),
+    };
+  }
+  await putMWCosts(existing);
+  return ok({ saved: rows.length, total: Object.keys(existing).length });
+}
+
+async function handleManualWholesaleParse(rawBody) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return err(500, 'Missing ANTHROPIC_API_KEY');
+
+  const { vendor, fileBase64, mediaType, fileText } = JSON.parse(rawBody);
+
+  let content;
+  let prompt;
+
+  if (vendor === 'babybay') {
+    prompt = 'This is a BabyBay weekly settlement invoice. Extract all order rows. Return JSON only (no explanation): { "rows": [ { "orderId": "1132", "cost": 54.19, "orderDate": "2026-08-07" } ] }. orderId = Order ID column (number as string). cost = Net Payout column (number). orderDate = YYYY-MM-DD.';
+  } else if (vendor === 'naturepedic') {
+    prompt = 'This is a Naturepedic order confirmation. Extract: PO # (= Shopify order number) and Total (what Birch owes, including shipping + tax). Return JSON only: { "orderId": "1347", "cost": 262.51 }. orderId = PO # field. cost = Total amount (number, no $ sign).';
+  } else {
+    return err(400, `Unknown vendor: ${vendor}`);
+  }
+
+  if (fileText) {
+    content = [{ type: 'text', text: `${prompt}\n\nDocument content:\n${fileText}` }];
+  } else {
+    content = [
+      { type: 'document', source: { type: 'base64', media_type: mediaType, data: fileBase64 } },
+      { type: 'text', text: prompt },
+    ];
+  }
+
+  const result = await httpsPost(
+    'api.anthropic.com',
+    '/v1/messages',
+    { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+    { model: 'claude-haiku-4-5-20251001', max_tokens: 2048, messages: [{ role: 'user', content }] }
+  );
+
+  if (result.status !== 200) return err(result.status, `Anthropic API error: ${JSON.stringify(result.body)}`);
+
+  const text = result.body?.content?.[0]?.text || '';
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return err(422, JSON.stringify({ error: 'Could not extract JSON from Claude response', raw: text }));
+
+  try {
+    return ok(JSON.parse(jsonMatch[0]));
+  } catch {
+    return err(422, JSON.stringify({ error: 'Invalid JSON from Claude', raw: text }));
+  }
+}
+
 // ── main handler ──────────────────────────────────────────────────────────────
 
 // Static dashboard API key. Function-URL CORS already restricts browser
@@ -610,6 +706,17 @@ export const handler = async (event) => {
 
   if (rawPath === '/meta/insights') {
     return handleMetaInsights(queryString);
+  }
+
+  if (rawPath === '/manual-wholesale/costs') {
+    if (event.requestContext?.http?.method === 'PUT' || event.httpMethod === 'PUT') {
+      return handleManualWholesaleCostsPut(event.body || '{}');
+    }
+    return handleManualWholesaleCostsGet();
+  }
+
+  if (rawPath === '/manual-wholesale/parse') {
+    return handleManualWholesaleParse(event.body || '{}');
   }
 
   return err(404, `Route not found: ${rawPath}`);
