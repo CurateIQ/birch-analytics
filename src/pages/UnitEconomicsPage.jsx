@@ -1,17 +1,19 @@
 /**
  * UnitEconomicsPage.jsx
- * Combined unit economics page with tabs for each fulfillment stream.
- * Tabs: Collective | NJ Warehouse
- * Layout per tab: KPI cards → rolling 7-day daily charts → since-launch weekly charts → breakdown table
+ * Tabs: Collective | NJ Warehouse | Manual Wholesale
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { KPICard } from '../components/KPICard';
 import { fetchCollectiveMarginData } from '../api/collectiveMargin';
 import { fetchNJWarehouseMarginData } from '../api/njWarehouseMargin';
+import {
+  fetchManualWholesaleMarginData,
+  parseSupplierDocument,
+  saveManualWholesaleCosts,
+} from '../api/manualWholesaleMargin';
 
-// ── colour tokens ─────────────────────────────────────────────────────────────
 const GROSS_COLOR = '#5A7A5C';
 const NET_COLOR   = '#C8763A';
 
@@ -39,8 +41,9 @@ function PageShell({ title, subtitle, onBack, children }) {
 
 function TabBar({ tab, setTab }) {
   const tabs = [
-    { id: 'collective',   label: 'Collective' },
-    { id: 'nj_warehouse', label: 'NJ Warehouse' },
+    { id: 'collective',       label: 'Collective' },
+    { id: 'nj_warehouse',     label: 'NJ Warehouse' },
+    { id: 'manual_wholesale', label: 'Manual Wholesale' },
   ];
   return (
     <div style={{ display: 'flex', gap: 0, borderBottom: '1.5px solid #E0DDD6', marginBottom: 16 }}>
@@ -72,7 +75,7 @@ function SectionLabel({ children }) {
   );
 }
 
-function ChartCard({ title, children, legend }) {
+function ChartCard({ title, children, legend, footnote }) {
   return (
     <div style={{ background: '#FFFFFF', border: '0.5px solid #E0DDD6', borderRadius: 10, padding: '12px 14px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -93,6 +96,7 @@ function ChartCard({ title, children, legend }) {
         )}
       </div>
       {children}
+      {footnote}
     </div>
   );
 }
@@ -102,6 +106,28 @@ const KPI_GROUP_LABEL = {
   textTransform: 'uppercase', marginBottom: 6,
 };
 
+// ── COGS exclusion footnote — shown on every KPI/chart section when count > 0 ─
+
+function ExclusionNote({ count, gmv }) {
+  if (!count) return null;
+  const usd = v => `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return (
+    <div style={{
+      padding: '8px 12px', background: '#FEF3E2',
+      border: '1px solid #F5A623', borderRadius: 7,
+      fontSize: 12, color: '#7A4A00', marginBottom: 14,
+      display: 'flex', alignItems: 'center', gap: 8,
+    }}>
+      <span style={{ fontSize: 16 }}>⚠</span>
+      <span>
+        <strong>{count} order{count !== 1 ? 's' : ''} with {usd(gmv)} GMV excluded</strong> — COGS not available.
+        These orders are not included in any revenue or margin figure above.
+        Upload cost data to include them.
+      </span>
+    </div>
+  );
+}
+
 // ── dual-line chart ───────────────────────────────────────────────────────────
 
 function DualTooltip({ active, payload, valueFormatter }) {
@@ -110,8 +136,8 @@ function DualTooltip({ active, payload, valueFormatter }) {
   const shown = {};
   payload.forEach(p => {
     if (p.value == null) return;
-    const label = p.dataKey.toLowerCase().startsWith('gross') ? 'Gross' : 'Net';
-    const isEst = p.dataKey.endsWith('Est') || p.dataKey.endsWith('PctEst');
+    const label  = p.dataKey.toLowerCase().startsWith('gross') ? 'Gross' : 'Net';
+    const isEst  = p.dataKey.endsWith('Est') || p.dataKey.endsWith('PctEst');
     if (!shown[label]) shown[label] = { value: p.value, color: p.color, estimated: isEst };
   });
   return (
@@ -166,10 +192,10 @@ function DualLineChart({ data, isDollar = true, valueFormatter, height = 180 }) 
 
 // ── formatters ────────────────────────────────────────────────────────────────
 
-const usd             = v => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-const pct             = v => v == null ? '—' : `${v}%`;
-const fmtChartDollar  = v => v == null ? '' : v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${Math.round(v)}`;
-const fmtChartPct     = v => v == null ? '' : `${Math.round(v)}%`;
+const usd            = v => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const pct            = v => v == null ? '—' : `${v}%`;
+const fmtChartDollar = v => v == null ? '' : v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${Math.round(v)}`;
+const fmtChartPct    = v => v == null ? '' : `${Math.round(v)}%`;
 
 // ── table styles ──────────────────────────────────────────────────────────────
 
@@ -199,11 +225,8 @@ function SnapshotBanner({ result }) {
     ? 'Live cost data (no snapshot on file yet — costs from today\'s Shopify catalog)'
     : `Cost data from snapshot ${result.snapshotDate}`;
   return (
-    <div style={{ padding: '7px 12px', background: amber ? '#FAEEDA' : '#F0EDE6', border: `0.5px solid ${amber ? '#E8C97A' : '#E0DDD6'}`, borderRadius: 7, fontSize: 11, color: amber ? '#854F0B' : '#5F5E5A', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      <span>{snapshotLabel}</span>
-      {result.coveredRevenuePct < 95 && (
-        <span style={{ color: '#854F0B', fontWeight: 600 }}>⚠ {result.coveredRevenuePct}% revenue covered — {(100 - result.coveredRevenuePct).toFixed(1)}% has no cost match</span>
-      )}
+    <div style={{ padding: '7px 12px', background: amber ? '#FAEEDA' : '#F0EDE6', border: `0.5px solid ${amber ? '#E8C97A' : '#E0DDD6'}`, borderRadius: 7, fontSize: 11, color: amber ? '#854F0B' : '#5F5E5A', marginBottom: 14 }}>
+      {snapshotLabel}
     </div>
   );
 }
@@ -254,6 +277,19 @@ function KPIRow({ result }) {
   );
 }
 
+// ── reconciliation control ────────────────────────────────────────────────────
+
+function ReconciliationLine({ included, excluded, stream, shopify, note }) {
+  return (
+    <div style={{ fontSize: 10, color: '#8C8A85', marginTop: 6, fontFamily: 'DM Mono, monospace' }}>
+      In numbers: {included} orders
+      {excluded > 0 ? ` · Excluded (no COGS): ${excluded}` : ''}
+      {` · Stream total: ${stream} · Shopify all streams: ${shopify}`}
+      {note ? <span style={{ fontFamily: 'DM Sans, sans-serif', color: '#B0ADA8' }}> — {note}</span> : null}
+    </div>
+  );
+}
+
 // ── Collective section ────────────────────────────────────────────────────────
 
 function CollectiveSection() {
@@ -280,16 +316,19 @@ function CollectiveSection() {
   ];
   const dailyLegend = [{ label: 'Gross', color: GROSS_COLOR }, { label: 'Net', color: NET_COLOR }];
 
+  const exclusionNote = <ExclusionNote count={result.excludedCount} gmv={result.excludedGMV} />;
+
   return (
     <>
       <SnapshotBanner result={result} />
+      {exclusionNote}
 
       <SectionLabel>Rolling 7 Days</SectionLabel>
       <KPIRow result={result} />
 
       <SectionLabel>Rolling 7 Days — Daily</SectionLabel>
       <div style={{ display: 'grid', gap: 12 }}>
-        <ChartCard title="Margin $ — daily (last 7 days)" legend={dailyLegend}>
+        <ChartCard title="Margin $ — daily (last 7 days)" legend={dailyLegend} footnote={exclusionNote}>
           <DualLineChart data={result.daily7} isDollar={true}  valueFormatter={fmtChartDollar} />
         </ChartCard>
         <ChartCard title="Margin % — daily (last 7 days)" legend={dailyLegend}>
@@ -305,7 +344,7 @@ function CollectiveSection() {
         </div>
       )}
       <div style={{ display: 'grid', gap: 12 }}>
-        <ChartCard title="Margin $ — weekly (since Jun 2026)" legend={weeklyLegend}>
+        <ChartCard title="Margin $ — weekly (since Jun 2026)" legend={weeklyLegend} footnote={exclusionNote}>
           <DualLineChart data={result.weeklyLaunch.map(w => ({ ...w, label: w.weekLabel, range: w.weekRange }))} isDollar={true}  valueFormatter={fmtChartDollar} height={200} />
         </ChartCard>
         <ChartCard title="Margin % — weekly (since Jun 2026)" legend={weeklyLegend}>
@@ -339,13 +378,15 @@ function CollectiveSection() {
           </table>
         </div>
         <div style={{ fontSize: 9, color: '#C8BFB0', marginTop: 6 }}>
-          Since launch · Margin % Net below 15% highlighted red · Shipping = $0 · Processing fee = 2.25% + $0.30/order
+          Since launch · Margin % Net below 15% highlighted red · Shipping = $0 · Processing fee = 2.25% + $0.30/order · Orders with missing COGS excluded
         </div>
-        {result.shopifyOrderCount != null && (
-          <div style={{ fontSize: 10, color: '#8C8A85', marginTop: 6, fontFamily: 'DM Mono, monospace' }}>
-            Dashboard Collective orders (filtered): {result.byVendor.reduce((s, r) => s + (r.orderCount || 0), 0)} · Shopify total orders since launch: {result.shopifyOrderCount}
-          </div>
-        )}
+        <ReconciliationLine
+          included={result.byVendor.reduce((s, r) => s + (r.orderCount || 0), 0)}
+          excluded={result.excludedCount}
+          stream={result.streamOrderCount}
+          shopify={result.shopifyOrderCount}
+          note="stream = Collective vendor/fulfillment_service match, non-cancelled"
+        />
       </div>
       <div style={{ height: 40 }} />
     </>
@@ -377,13 +418,13 @@ function NJWarehouseSection() {
     ...(hasEstimatedWeeks ? [{ label: 'Estimated', color: '#C8BFB0', dashed: true }] : []),
   ];
   const dailyLegend = [{ label: 'Gross', color: GROSS_COLOR }, { label: 'Net', color: NET_COLOR }];
+  const exclusionNote = <ExclusionNote count={result.excludedCount} gmv={result.excludedGMV} />;
 
   return (
     <>
-      {/* Cost snapshot banner */}
       <SnapshotBanner result={result} />
+      {exclusionNote}
 
-      {/* Data completeness indicators */}
       <div style={{ background: '#F8F6F0', border: '0.5px solid #E0DDD6', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: '#8C8A85', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Data Completeness</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -399,11 +440,13 @@ function NJWarehouseSection() {
         {result.coveredRevenuePct < 80 && (
           <div style={{ fontSize: 10, color: '#854F0B', marginTop: 4 }}>⚠ Low COGS coverage — populate unit costs in Shopify admin to improve margin accuracy</div>
         )}
-        {result.shopifyOrderCount != null && (
-          <div style={{ fontSize: 10, color: '#8C8A85', marginTop: 6, fontFamily: 'DM Mono, monospace' }}>
-            Dashboard NJ orders: {result.kpi.orderCount ?? '…'} (7d) · Shopify total orders since launch: {result.shopifyOrderCount}
-          </div>
-        )}
+        <ReconciliationLine
+          included={result.kpi.orderCount ?? 0}
+          excluded={result.excludedCount}
+          stream={result.streamOrderCount}
+          shopify={result.shopifyOrderCount}
+          note="stream = Veeqo NJ Warehouse allocation (or manual fallback), non-cancelled, Babybay/Naturepedic excluded"
+        />
       </div>
 
       <SectionLabel>Rolling 7 Days</SectionLabel>
@@ -411,7 +454,7 @@ function NJWarehouseSection() {
 
       <SectionLabel>Rolling 7 Days — Daily</SectionLabel>
       <div style={{ display: 'grid', gap: 12 }}>
-        <ChartCard title="Margin $ — daily (last 7 days)" legend={dailyLegend}>
+        <ChartCard title="Margin $ — daily (last 7 days)" legend={dailyLegend} footnote={exclusionNote}>
           <DualLineChart data={result.daily7} isDollar={true}  valueFormatter={fmtChartDollar} />
         </ChartCard>
         <ChartCard title="Margin % — daily (last 7 days)" legend={dailyLegend}>
@@ -427,7 +470,7 @@ function NJWarehouseSection() {
         </div>
       )}
       <div style={{ display: 'grid', gap: 12 }}>
-        <ChartCard title="Margin $ — weekly (since Jun 2026)" legend={weeklyLegend}>
+        <ChartCard title="Margin $ — weekly (since Jun 2026)" legend={weeklyLegend} footnote={exclusionNote}>
           <DualLineChart data={result.weeklyLaunch.map(w => ({ ...w, label: w.weekLabel, range: w.weekRange }))} isDollar={true}  valueFormatter={fmtChartDollar} height={200} />
         </ChartCard>
         <ChartCard title="Margin % — weekly (since Jun 2026)" legend={weeklyLegend}>
@@ -435,7 +478,6 @@ function NJWarehouseSection() {
         </ChartCard>
       </div>
 
-      {/* By category table */}
       {result.byCategory?.length > 0 && (
         <>
           <SectionLabel>By Product Category</SectionLabel>
@@ -463,12 +505,326 @@ function NJWarehouseSection() {
               </table>
             </div>
             <div style={{ fontSize: 9, color: '#C8BFB0', marginTop: 6 }}>
-              Since launch · Margin % Net below 15% highlighted red · Processing 2.25% + $0.30/order · Handling $2.00 + $0.35/additional unit · Shipping from Veeqo
+              Since launch · Margin % Net below 15% highlighted red · Processing 2.25% + $0.30/order · Handling $2.00 + $0.35/additional unit · Shipping from Veeqo · Orders with missing COGS excluded
             </div>
           </div>
         </>
       )}
+      <div style={{ height: 40 }} />
+    </>
+  );
+}
 
+// ── Manual Wholesale — file upload component ──────────────────────────────────
+
+function UploadBox({ vendor, label, accept, hint, onParsed, disabled }) {
+  const [status, setStatus]   = useState('idle'); // idle | parsing | done | error
+  const [message, setMessage] = useState('');
+  const inputRef = useRef();
+
+  async function handleFile(file) {
+    if (!file) return;
+    setStatus('parsing');
+    setMessage('');
+    try {
+      let result;
+      if (file.name.endsWith('.csv') || file.name.endsWith('.txt')) {
+        // CSV: read as text, send as text/plain
+        const text = await file.text();
+        const b64  = btoa(unescape(encodeURIComponent(text)));
+        result = await parseSupplierDocument(vendor, b64, 'text/plain');
+      } else {
+        // PDF: read as ArrayBuffer → base64
+        const buf  = await file.arrayBuffer();
+        const b64  = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        result = await parseSupplierDocument(vendor, b64, 'application/pdf');
+      }
+      setStatus('done');
+      onParsed(result);
+    } catch (e) {
+      setStatus('error');
+      setMessage(e.message || 'Parse failed');
+    }
+  }
+
+  return (
+    <div style={{ border: '1.5px dashed #D0CCC4', borderRadius: 10, padding: '16px 18px', background: '#FAFAF8' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#3D3226', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 11, color: '#8C8A85', marginBottom: 12 }}>{hint}</div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        style={{ display: 'none' }}
+        onChange={e => handleFile(e.target.files[0])}
+        disabled={disabled}
+      />
+      <button
+        onClick={() => inputRef.current?.click()}
+        disabled={disabled || status === 'parsing'}
+        style={{
+          background: '#3D3226', color: '#FFF', border: 'none', borderRadius: 7,
+          padding: '7px 14px', fontSize: 12, cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.5 : 1, fontFamily: 'DM Sans, sans-serif',
+        }}
+      >
+        {status === 'parsing' ? 'Parsing…' : 'Choose file'}
+      </button>
+      {status === 'error' && (
+        <div style={{ marginTop: 8, fontSize: 11, color: '#A32D2D' }}>⚠ {message}</div>
+      )}
+    </div>
+  );
+}
+
+function ParsedPreview({ vendor, parsed, onConfirm, onDiscard, saving }) {
+  if (!parsed) return null;
+
+  const rows = vendor === 'babybay'
+    ? (parsed.rows || [])
+    : parsed.orderId ? [{ orderId: parsed.orderId, cost: parsed.total, orderDate: '' }] : [];
+
+  const usdFmt = v => `$${Number(v).toFixed(2)}`;
+
+  return (
+    <div style={{ marginTop: 14, background: '#F0EDE6', borderRadius: 8, padding: '12px 14px' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#3D3226', marginBottom: 8 }}>
+        Parsed {rows.length} order{rows.length !== 1 ? 's' : ''} — review before saving
+      </div>
+      <div style={{ overflowX: 'auto', maxHeight: 200, overflowY: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+          <thead>
+            <tr>
+              <th style={{ ...TH, textAlign: 'left' }}>Order #</th>
+              {vendor === 'babybay' && <th style={{ ...TH, textAlign: 'left' }}>Date</th>}
+              <th style={{ ...TH, textAlign: 'right', paddingRight: 8 }}>
+                {vendor === 'babybay' ? 'Net Payout' : 'Total Cost'}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td style={{ ...TD }}>{r.orderId}</td>
+                {vendor === 'babybay' && <td style={{ ...TD }}>{r.orderDate || '—'}</td>}
+                <td style={{ ...TD, textAlign: 'right', paddingRight: 8, fontFamily: 'DM Mono, monospace' }}>{usdFmt(r.cost)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button
+          onClick={() => onConfirm(rows)}
+          disabled={saving}
+          style={{ background: '#3D3226', color: '#FFF', border: 'none', borderRadius: 7, padding: '7px 14px', fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+        >
+          {saving ? 'Saving…' : `Save ${rows.length} record${rows.length !== 1 ? 's' : ''}`}
+        </button>
+        <button
+          onClick={onDiscard}
+          style={{ background: '#F0EDE6', border: '0.5px solid #D0CCC4', borderRadius: 7, padding: '7px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+        >
+          Discard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UploadSection({ vendor, label, hint, accept }) {
+  const [parsed, setParsed]   = useState(null);
+  const [saving, setSaving]   = useState(false);
+  const [saved, setSaved]     = useState(null); // { count }
+  const [saveError, setSaveError] = useState('');
+
+  async function handleConfirm(rows) {
+    setSaving(true);
+    setSaveError('');
+    try {
+      const costRows = rows.map(r => ({
+        orderId:  String(r.orderId),
+        cost:     parseFloat(r.cost),
+        vendor,
+        source:   vendor === 'babybay' ? 'babybay_weekly_invoice' : 'naturepedic_po_upload',
+        date:     r.orderDate || new Date().toISOString().slice(0, 10),
+      }));
+      await saveManualWholesaleCosts(costRows);
+      setSaved({ count: costRows.length });
+      setParsed(null);
+    } catch (e) {
+      setSaveError(e.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <UploadBox
+        vendor={vendor}
+        label={label}
+        accept={accept}
+        hint={hint}
+        onParsed={setParsed}
+        disabled={saving}
+      />
+      <ParsedPreview
+        vendor={vendor}
+        parsed={parsed}
+        onConfirm={handleConfirm}
+        onDiscard={() => setParsed(null)}
+        saving={saving}
+      />
+      {saved && (
+        <div style={{ marginTop: 8, fontSize: 11, color: '#3D6B40' }}>
+          ✓ Saved {saved.count} cost record{saved.count !== 1 ? 's' : ''}. Reload the page to see updated margins.
+        </div>
+      )}
+      {saveError && (
+        <div style={{ marginTop: 8, fontSize: 11, color: '#A32D2D' }}>⚠ {saveError}</div>
+      )}
+    </div>
+  );
+}
+
+// ── Manual Wholesale section ──────────────────────────────────────────────────
+
+function ManualWholesaleSection() {
+  const [result, setResult]     = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+  const [showUpload, setShowUpload] = useState(false);
+
+  useEffect(() => {
+    fetchManualWholesaleMarginData()
+      .then(setResult)
+      .catch(e => setError(e.message || 'Failed to load Manual Wholesale data'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const dailyLegend   = [{ label: 'Gross', color: GROSS_COLOR }, { label: 'Net', color: NET_COLOR }];
+  const weeklyLegend  = dailyLegend;
+
+  return (
+    <>
+      {/* Persistent arrangement banner */}
+      <div style={{
+        padding: '10px 14px', background: '#EEF3FD',
+        border: '1px solid #B8CCF0', borderRadius: 8,
+        fontSize: 12, color: '#2C4A7A', marginBottom: 16,
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <span style={{ fontSize: 16 }}>ℹ</span>
+        <span>
+          <strong>Manual Wholesale</strong> — Babybay and Naturepedic, temporary arrangement (~2–3 months).
+          Cost data entered via manual invoice/PO upload rather than API integration.
+        </span>
+      </div>
+
+      {/* Upload controls */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontSize: 11, color: '#8C8A85' }}>
+          {result ? `${result.uploadedCostCount} cost records on file` : ''}
+        </div>
+        <button
+          onClick={() => setShowUpload(v => !v)}
+          style={{ background: '#F0EDE6', border: '0.5px solid #D0CCC4', borderRadius: 7, padding: '5px 12px', fontSize: 11, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+        >
+          {showUpload ? '▲ Hide upload' : '▼ Upload invoices'}
+        </button>
+      </div>
+
+      {showUpload && (
+        <div style={{ background: '#FFFFFF', border: '0.5px solid #E0DDD6', borderRadius: 10, padding: '16px 16px', marginBottom: 16 }}>
+          <SectionLabel>Upload Cost Data</SectionLabel>
+          <UploadSection
+            vendor="babybay"
+            label="BabyBay — Weekly Settlement Invoice"
+            hint="PDF or CSV · Columns: Order Date, Order ID, Promo Eligible, MSRP, Birch Margin, Promo Margin, Net Payout. Cost stored = Net Payout."
+            accept=".pdf,.csv,.txt"
+          />
+          <UploadSection
+            vendor="naturepedic"
+            label="Naturepedic — Per-Order PO / Order Confirmation"
+            hint="PDF · Extracts PO # (= Shopify order number) and Total (what Birch owes, including shipping + tax)."
+            accept=".pdf"
+          />
+        </div>
+      )}
+
+      {loading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#8C8A85', fontSize: 13 }}>Loading Manual Wholesale orders and cost data…</div>}
+      {error   && <div style={{ padding: '12px 14px', background: '#FCEBEB', border: '0.5px solid #E24B4A', borderRadius: 8, fontSize: 13, color: '#A32D2D' }}>⚠ {error}</div>}
+
+      {result && (
+        <>
+          <ExclusionNote count={result.excludedCount} gmv={result.excludedGMV} />
+
+          <SectionLabel>Rolling 7 Days</SectionLabel>
+          <KPIRow result={result} />
+
+          <SectionLabel>Rolling 7 Days — Daily</SectionLabel>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <ChartCard title="Margin $ — daily (last 7 days)" legend={dailyLegend}>
+              <DualLineChart data={result.daily7} isDollar={true}  valueFormatter={fmtChartDollar} />
+            </ChartCard>
+            <ChartCard title="Margin % — daily (last 7 days)" legend={dailyLegend}>
+              <DualLineChart data={result.daily7} isDollar={false} valueFormatter={fmtChartPct} />
+            </ChartCard>
+          </div>
+
+          <SectionLabel>Since Launch — Weekly</SectionLabel>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <ChartCard title="Margin $ — weekly (since Jun 2026)" legend={weeklyLegend}>
+              <DualLineChart data={result.weeklyLaunch.map(w => ({ ...w, label: w.weekLabel, range: w.weekRange }))} isDollar={true}  valueFormatter={fmtChartDollar} height={200} />
+            </ChartCard>
+            <ChartCard title="Margin % — weekly (since Jun 2026)" legend={weeklyLegend}>
+              <DualLineChart data={result.weeklyLaunch.map(w => ({ ...w, label: w.weekLabel, range: w.weekRange }))} isDollar={false} valueFormatter={fmtChartPct} height={200} />
+            </ChartCard>
+          </div>
+
+          {result.byVendor?.length > 0 && (
+            <>
+              <SectionLabel>By Supplier</SectionLabel>
+              <div style={{ background: '#FFFFFF', border: '0.5px solid #E0DDD6', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+                    <thead>
+                      <tr>
+                        {['Supplier', 'Orders', 'Margin $ Gross', 'Margin $ Net', 'Margin % Gross', 'Margin % Net'].map((h, i) => (
+                          <th key={h} style={{ ...TH, textAlign: i === 0 ? 'left' : 'right', paddingRight: i !== 0 ? 8 : 0 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.byVendor.map((row, i) => (
+                        <tr key={i}>
+                          <td style={{ ...TD, color: '#3D3226', fontWeight: 500, paddingRight: 8 }}>{row.vendor}</td>
+                          <td style={{ ...TD, textAlign: 'right', paddingRight: 8, fontFamily: 'DM Mono, monospace' }}>{row.orderCount || '—'}</td>
+                          <td style={{ ...TD, textAlign: 'right', paddingRight: 8, fontFamily: 'DM Mono, monospace' }}>{usd(row.marginDollarGross)}</td>
+                          <td style={{ ...TD, textAlign: 'right', paddingRight: 8, fontFamily: 'DM Mono, monospace' }}>{usd(row.marginDollarNet)}</td>
+                          <td style={{ ...TD, textAlign: 'right', paddingRight: 8, fontFamily: 'DM Mono, monospace' }}>{pct(row.marginPctGross)}</td>
+                          <NetPctCell value={row.marginPctNet} />
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ fontSize: 9, color: '#C8BFB0', marginTop: 6 }}>
+                  Since launch · Margin % Net below 15% highlighted red · Cost = uploaded invoice/PO amount (shipping bundled) · Processing fee = 2.25% + $0.30/order
+                </div>
+                <ReconciliationLine
+                  included={result.byVendor.reduce((s, r) => s + (r.orderCount || 0), 0)}
+                  excluded={result.excludedCount}
+                  stream={result.streamOrderCount}
+                  shopify={result.shopifyOrderCount}
+                  note="excluded = orders with no uploaded cost yet"
+                />
+              </div>
+            </>
+          )}
+        </>
+      )}
       <div style={{ height: 40 }} />
     </>
   );
@@ -486,8 +842,9 @@ export function UnitEconomicsPage({ onBack }) {
       onBack={onBack}
     >
       <TabBar tab={tab} setTab={setTab} />
-      {tab === 'collective'   && <CollectiveSection />}
-      {tab === 'nj_warehouse' && <NJWarehouseSection />}
+      {tab === 'collective'       && <CollectiveSection />}
+      {tab === 'nj_warehouse'     && <NJWarehouseSection />}
+      {tab === 'manual_wholesale' && <ManualWholesaleSection />}
     </PageShell>
   );
 }

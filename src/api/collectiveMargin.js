@@ -26,7 +26,6 @@ export const COLLECTIVE_VENDORS = new Set([
   "Parasol Co",
   "ezpz",
   "Lovevery", // connected Aug 26 2026; new orders also auto-detect via fulfillment_service
-  "Babybay",  // Shipturtle dropship partner (not Collective, but same margin treatment)
 ]);
 
 // Launch date — first full Monday on/after site launch mid-June 2026.
@@ -269,20 +268,19 @@ export async function fetchCollectiveMarginData() {
   const { skuLookup, snapshotDate, firstSnapshotDate, isLiveFallback } = costData;
 
   // Only non-cancelled, non-refunded Collective orders.
-  const collectiveOrders = allOrders
+  const allComputedOrders = allOrders
     .filter(o => !o.cancel_reason && o.financial_status !== 'refunded')
     .filter(o => (o.line_items || []).some(isCollectiveItem))
     .map(o => computeOrderMargin(o, skuLookup))
     .filter(Boolean);
 
-  // Coverage stat.
-  const totalRev = collectiveOrders.reduce((s, o) => s + o.revenueGross, 0);
-  const coveredRev = collectiveOrders
-    .filter(o => !o.missingCost)
-    .reduce((s, o) => s + o.revenueGross, 0);
-  const coveredRevenuePct = totalRev > 0
-    ? Math.round((coveredRev / totalRev) * 1000) / 10
-    : 100;
+  // Universal rule: orders with ANY missing COGS are excluded entirely from revenue/margin.
+  // They are tracked separately and shown as a visible footnote in the UI.
+  const collectiveOrders = allComputedOrders.filter(o => !o.missingCost);
+  const noCOGSOrders     = allComputedOrders.filter(o => o.missingCost);
+  const excludedCount    = noCOGSOrders.length;
+  const excludedGMV      = Math.round(noCOGSOrders.reduce((s, o) => s + o.revenueGross, 0) * 100) / 100;
+  const streamOrderCount = allComputedOrders.length;
 
   // KPI — rolling 7 days.
   const recent7 = collectiveOrders.filter(o => o.orderDate >= toETDate(sevenDaysAgo));
@@ -370,7 +368,9 @@ export async function fetchCollectiveMarginData() {
     snapshotDate,
     firstSnapshotDate,
     isLiveFallback,
-    coveredRevenuePct,
+    excludedCount,
+    excludedGMV,
+    streamOrderCount,
     shopifyOrderCount: allOrders.length,
   };
 }

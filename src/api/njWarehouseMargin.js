@@ -27,8 +27,12 @@ import { fetchVeeqoData } from './veeqo';
 export const LAUNCH_DATE = '2026-06-12T00:00:00.000Z';
 const NJ_LOCATION = 'NJ Warehouse';
 
+// Vendors handled by the Manual Wholesale stream — must not bleed into NJ Warehouse
+// even in the Veeqo fallback path (which classifies by fulfillment_service === 'manual').
+const MANUAL_WHOLESALE_VENDORS = new Set(['Babybay', 'Naturepedic']);
+
 function isNJItem(item) {
-  return item.fulfillment_service === 'manual';
+  return item.fulfillment_service === 'manual' && !MANUAL_WHOLESALE_VENDORS.has(item.vendor);
 }
 
 // ── cost snapshot loading (mirrors collectiveMargin.js) ───────────────────────
@@ -263,18 +267,26 @@ export async function fetchNJWarehouseMarginData() {
   const { shippingCosts, njOrderNames, partial: veeqoPartial, error: veeqoError } = veeqoData;
   const isVeeqoFallback = njOrderNames.size === 0;
 
-  const njOrders = allOrders
+  const allComputedOrders = allOrders
     .filter(o => !o.cancel_reason && o.financial_status !== 'refunded')
     .filter(o => {
       if (!isVeeqoFallback) return njOrderNames.has(o.name);
+      // Fallback: fulfillment_service === 'manual', but isNJItem already excludes
+      // MANUAL_WHOLESALE_VENDORS so Babybay/Naturepedic don't bleed in here.
       return (o.line_items || []).some(isNJItem);
     })
     .map(o => computeOrderMargin(o, skuLookup, shippingCosts.get(o.name) || 0))
     .filter(Boolean);
 
-  // Coverage stats
-  const totalRev   = njOrders.reduce((s, o) => s + o.revenueGross, 0);
-  const coveredRev = njOrders.filter(o => !o.missingCost).reduce((s, o) => s + o.revenueGross, 0);
+  // Universal rule: orders with ANY missing COGS are excluded entirely.
+  const njOrders      = allComputedOrders.filter(o => !o.missingCost);
+  const noCOGSOrders  = allComputedOrders.filter(o => o.missingCost);
+  const excludedCount = noCOGSOrders.length;
+  const excludedGMV   = Math.round(noCOGSOrders.reduce((s, o) => s + o.revenueGross, 0) * 100) / 100;
+  const streamOrderCount = allComputedOrders.length;
+
+  const totalRev   = allComputedOrders.reduce((s, o) => s + o.revenueGross, 0);
+  const coveredRev = njOrders.reduce((s, o) => s + o.revenueGross, 0);
   const coveredRevenuePct = totalRev > 0 ? Math.round((coveredRev / totalRev) * 1000) / 10 : 100;
 
   const shippedOrders = njOrders.filter(o => o.shippingCost > 0).length;
@@ -385,6 +397,9 @@ export async function fetchNJWarehouseMarginData() {
     veeqoPartialError: veeqoError || null,
     coveredRevenuePct,
     shippingCoveredPct,
+    excludedCount,
+    excludedGMV,
+    streamOrderCount,
     shopifyOrderCount: allOrders.length,
   };
 }

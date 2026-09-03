@@ -53,35 +53,37 @@ export async function fetchOrders(startDate, endDate, limit = 250) {
   return allOrders;
 }
 
-// Collective vendor set (duplicated here for classification; collectiveMargin.js is the source of truth for margin calcs)
-// Source of truth: Shopify Collective Suppliers page → Connected tab
+// Collective vendor set (source of truth: Shopify Collective Suppliers page → Connected tab)
 const COLLECTIVE_VENDORS_SET = new Set([
   "Apple Park & Organic Farm Buddies", "DYPER", "L'ovedbaby",
   "Makemake Organics", "Parasol Co", "ezpz",
   "Lovevery", // connected Aug 26 2026
-  "Babybay",  // Shipturtle dropship partner
 ]);
+
+// Manual Wholesale vendors — checked first so they never bleed into nj_warehouse
+const MANUAL_WHOLESALE_VENDORS_SET = new Set(["Babybay", "Naturepedic"]);
 
 /**
  * Classifies the primary fulfillment stream for an order.
- * Returns: 'collective' | 'nj_warehouse' | 'retail_pos' | 'unknown'
+ * Returns: 'manual_wholesale' | 'collective' | 'nj_warehouse' | 'retail_pos' | 'unknown'
  *
- * Note: 'nj_warehouse' vs 'jit' cannot be distinguished from Shopify data alone —
- * both use fulfillment_service === 'manual'. Use Veeqo allocation.warehouse.name
- * to distinguish NJ Warehouse from JIT locations definitively.
- *
- * @param {object} order  Shopify order object (must include line_items)
+ * manual_wholesale is checked first — Babybay/Naturepedic use fulfillment_service==='manual'
+ * and must not be classified as nj_warehouse.
  */
 export function classifyOrderStream(order) {
   if (order.source_name === 'pos') return 'retail_pos';
   const items = order.line_items || [];
   if (!items.length) return 'unknown';
+  const hasManualWholesale = items.some(item => MANUAL_WHOLESALE_VENDORS_SET.has(item.vendor));
   const hasCollective = items.some(
     item => COLLECTIVE_VENDORS_SET.has(item.vendor) || item.fulfillment_service?.includes('shopify-collective')
   );
-  const hasManual = items.some(item => item.fulfillment_service === 'manual');
+  const hasManual = items.some(
+    item => item.fulfillment_service === 'manual' && !MANUAL_WHOLESALE_VENDORS_SET.has(item.vendor)
+  );
+  if (hasManualWholesale) return 'manual_wholesale';
   if (hasCollective) return 'collective';
-  if (hasManual) return 'nj_warehouse'; // may include JIT — use Veeqo to split further
+  if (hasManual) return 'nj_warehouse';
   return 'unknown';
 }
 
