@@ -46,7 +46,7 @@ function aggregateMetaRows(rows, startDate, endDate) {
   const map = {};
   inRange.forEach(r => {
     if (!map[r.campaignName]) {
-      map[r.campaignName] = { campaignName: r.campaignName, campaignId: r.campaignName, spend: 0, impressions: 0, clicks: 0, purchases: 0 };
+      map[r.campaignName] = { campaignName: r.campaignName, campaignId: r.campaignId || null, spend: 0, impressions: 0, clicks: 0, purchases: 0 };
     }
     const c = map[r.campaignName];
     c.spend       += r.spend;
@@ -81,7 +81,7 @@ function aggregateGoogleRows(rows, weekStarts) {
   const map = {};
   inRange.forEach(r => {
     if (!map[r.campaignName]) {
-      map[r.campaignName] = { campaignName: r.campaignName, campaignId: r.campaignName, spend: 0, impressions: 0, clicks: 0, conversions: 0 };
+      map[r.campaignName] = { campaignName: r.campaignName, campaignId: r.campaignId || null, spend: 0, impressions: 0, clicks: 0, conversions: 0 };
     }
     const c = map[r.campaignName];
     c.spend       += r.spend;
