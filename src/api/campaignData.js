@@ -141,8 +141,8 @@ export async function fetchCampaignPageData() {
       fetchCampaignAttribution(sevenDaysAgo, now),
       fetchCampaignAttribution(thirtyDaysAgo, now),
     ]);
-    if (j7.status  === 'fulfilled') joinedMeta7  = attributeCampaignsToAdPlatform(metaCampaigns7,  j7.value);
-    if (j30.status === 'fulfilled') joinedMeta30 = attributeCampaignsToAdPlatform(metaCampaigns30, j30.value);
+    if (j7.status  === 'fulfilled') joinedMeta7  = attributeCampaignsToAdPlatform(metaCampaigns7,  j7.value,  'meta');
+    if (j30.status === 'fulfilled') joinedMeta30 = attributeCampaignsToAdPlatform(metaCampaigns30, j30.value, 'meta');
   }
 
   const meta7Totals  = sumCampaigns(joinedMeta7.campaigns);
@@ -153,10 +153,29 @@ export async function fetchCampaignPageData() {
   const lastWeek        = completeWeeks.slice(0, 1);
   const last4Weeks      = completeWeeks.slice(0, 4);
 
-  const googleLastWeek      = aggregateGoogleRows(googleRows, lastWeek);
-  const googleLast4Weeks    = aggregateGoogleRows(googleRows, last4Weeks);
-  const googleLastWeekTotals  = sumCampaigns(googleLastWeek);
-  const googleLast4WeeksTotals = sumCampaigns(googleLast4Weeks);
+  let googleLastWeek   = aggregateGoogleRows(googleRows, lastWeek);
+  let googleLast4Weeks = aggregateGoogleRows(googleRows, last4Weeks);
+
+  let joinedGoogleLastWeek   = { campaigns: googleLastWeek,   unmatched: [] };
+  let joinedGoogleLast4Weeks = { campaigns: googleLast4Weeks, unmatched: [] };
+
+  if (googleRows.length > 0 && completeWeeks.length > 0) {
+    // Determine date bounds for Google attribution windows
+    const lastWeekStart  = completeWeeks[0] ? new Date(completeWeeks[0]) : sevenDaysAgo;
+    const lastWeekEnd    = new Date(lastWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const last4WeekStart = completeWeeks[last4Weeks.length - 1] ? new Date(completeWeeks[last4Weeks.length - 1]) : thirtyDaysAgo;
+    const last4WeekEnd   = new Date(lastWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const [jGoogleWeek, jGoogleMonth] = await Promise.allSettled([
+      fetchCampaignAttribution(lastWeekStart, lastWeekEnd),
+      fetchCampaignAttribution(last4WeekStart, last4WeekEnd),
+    ]);
+    if (jGoogleWeek.status  === 'fulfilled') joinedGoogleLastWeek   = attributeCampaignsToAdPlatform(googleLastWeek,   jGoogleWeek.value,  'google');
+    if (jGoogleMonth.status === 'fulfilled') joinedGoogleLast4Weeks = attributeCampaignsToAdPlatform(googleLast4Weeks, jGoogleMonth.value, 'google');
+  }
+
+  const googleLastWeekTotals    = sumCampaigns(joinedGoogleLastWeek.campaigns);
+  const googleLast4WeeksTotals  = sumCampaigns(joinedGoogleLast4Weeks.campaigns);
 
   return {
     meta: {
@@ -176,10 +195,13 @@ export async function fetchCampaignPageData() {
       lastCompleteWeek: completeWeeks[0] || null,
       cpcLastWeek:     googleLastWeekTotals.cpc,
       cpmLastWeek:     googleLastWeekTotals.cpm,
+      cacLastWeek:     googleLastWeekTotals.cac,
       cpcLast4Weeks:   googleLast4WeeksTotals.cpc,
       cpmLast4Weeks:   googleLast4WeeksTotals.cpm,
-      campaignsLastWeek:   googleLastWeek,
-      campaignsLast4Weeks: googleLast4Weeks,
+      cacLast4Weeks:   googleLast4WeeksTotals.cac,
+      campaignsLastWeek:   joinedGoogleLastWeek.campaigns,
+      campaignsLast4Weeks: joinedGoogleLast4Weeks.campaigns,
+      unmatched: [...new Set([...joinedGoogleLastWeek.unmatched, ...joinedGoogleLast4Weeks.unmatched])],
     },
   };
 }

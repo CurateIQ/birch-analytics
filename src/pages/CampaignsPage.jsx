@@ -357,13 +357,13 @@ export function CampaignsPage({ data, onBack }) {
             <CsvUploadBox
               platform="meta"
               label="Meta Ads — Campaign export (day breakdown)"
-              hint="Ads Manager → Campaigns → Breakdown: Day → Export CSV. Required columns: Reporting starts, Campaign name, Amount spent (USD), Impressions, Link clicks, Purchases."
+              hint="Ads Manager → Campaigns → Breakdown: Day → Export CSV. Customize columns to include Campaign ID (needed for UTM matching — Meta tags URLs with the numeric ID, not the name). Required columns: Campaign ID, Reporting starts, Campaign name, Amount spent (USD), Impressions, Link clicks, Purchases."
               onUploaded={() => { setShowUpload(false); load(); }}
             />
             <CsvUploadBox
               platform="google"
               label="Google Ads — Campaign report (week segment)"
-              hint="Campaigns → Segment: Time → Week → Export CSV. Required columns: Week, Campaign, Cost, Impr., Clicks, Conversions. First two rows (Campaign report / All time) are skipped automatically."
+              hint="Campaigns → Segment: Time → Week → Export CSV. Ensure Campaign ID column is included (add via Columns menu). Required columns: Campaign ID, Week, Campaign, Cost, Impr., Clicks, Conversions. First two rows (Campaign report / All time) are skipped automatically."
               onUploaded={() => { setShowUpload(false); load(); }}
             />
           </div>
@@ -420,8 +420,7 @@ export function CampaignsPage({ data, onBack }) {
                   ⏳ No Google data yet — upload a CSV above.
                 </div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {/* Task B: "last complete week" and "last 4 weeks" instead of rolling 7d/30d */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                 <KPICard
                   label="CPC (last complete week)"
                   value={fmt.usdDec(google?.cpcLastWeek)}
@@ -437,6 +436,13 @@ export function CampaignsPage({ data, onBack }) {
                   definition={DEFS.cpm + ' ' + DEFS.google}
                 />
                 <KPICard
+                  label="CAC (last complete week)"
+                  value={fmt.usdDec(google?.cacLastWeek)}
+                  change={null}
+                  changeLabel={google?.cacLastWeek == null ? 'pending match' : null}
+                  definition={DEFS.cac + ' ' + DEFS.google}
+                />
+                <KPICard
                   label="CPC (last 4 weeks)"
                   value={fmt.usdDec(google?.cpcLast4Weeks)}
                   change={null}
@@ -450,6 +456,13 @@ export function CampaignsPage({ data, onBack }) {
                   changeLabel={!google?.hasData ? 'no data' : null}
                   definition={DEFS.cpm + ' ' + DEFS.google}
                 />
+                <KPICard
+                  label="CAC (last 4 weeks)"
+                  value={fmt.usdDec(google?.cacLast4Weeks)}
+                  change={null}
+                  changeLabel={google?.cacLast4Weeks == null ? 'pending match' : null}
+                  definition={DEFS.cac + ' ' + DEFS.google}
+                />
               </div>
               {google?.lastCompleteWeek && (
                 <div style={{ fontSize: 9, color: '#C8BFB0', marginTop: 8 }}>
@@ -459,10 +472,15 @@ export function CampaignsPage({ data, onBack }) {
             </PanelCard>
           </div>
 
-          {/* Unmatched UTM warning */}
+          {/* Unmatched UTM warning — only platform-sourced orders that failed to match a specific campaign */}
           {meta?.unmatched?.length > 0 && (
             <div style={{ padding: '10px 12px', background: '#FCEBEB', border: '0.5px solid #E24B4A', borderRadius: 8, fontSize: 11, color: '#A32D2D', marginTop: 12 }}>
-              ⚠ {meta.unmatched.length} UTM campaign{meta.unmatched.length !== 1 ? 's' : ''} with attributed orders didn't match any Meta campaign name: {meta.unmatched.join(', ')}
+              ⚠ Meta: {meta.unmatched.length} Meta-sourced UTM campaign{meta.unmatched.length !== 1 ? 's' : ''} with attributed orders didn't match any uploaded campaign ID or name: {meta.unmatched.join(', ')}
+            </div>
+          )}
+          {google?.unmatched?.length > 0 && (
+            <div style={{ padding: '10px 12px', background: '#FCEBEB', border: '0.5px solid #E24B4A', borderRadius: 8, fontSize: 11, color: '#A32D2D', marginTop: 8 }}>
+              ⚠ Google: {google.unmatched.length} Google-sourced UTM campaign{google.unmatched.length !== 1 ? 's' : ''} with attributed orders didn't match any uploaded campaign ID or name: {google.unmatched.join(', ')}
             </div>
           )}
 
@@ -498,8 +516,8 @@ export function CampaignsPage({ data, onBack }) {
               ga4Connected={ga4Connected}
               dateStart={google?.lastCompleteWeek}
               dateEnd={google?.lastCompleteWeek}
-              showCac={false}
-              footnote="Spend + clicks from uploaded CSV · Mon–Sun calendar week · CAC attribution not wired for Google in this build."
+              showCac={true}
+              footnote="Spend + clicks from uploaded CSV · Mon–Sun calendar week · CAC = spend ÷ new customers via Shopify last-click attribution."
             />
             <CampaignTable
               title="Last 4 complete weeks"
@@ -507,8 +525,8 @@ export function CampaignsPage({ data, onBack }) {
               ga4Connected={ga4Connected}
               dateStart={null}
               dateEnd={null}
-              showCac={false}
-              footnote="Spend + clicks from uploaded CSV · Mon–Sun calendar weeks."
+              showCac={true}
+              footnote="Spend + clicks from uploaded CSV · Mon–Sun calendar weeks · CAC = spend ÷ new customers via Shopify last-click attribution."
             />
           </div>
         </>

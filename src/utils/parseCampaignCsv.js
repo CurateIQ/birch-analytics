@@ -39,10 +39,11 @@ function int(v) { return parseInt(String(v).replace(/,/g, ''), 10) || 0; }
  * Parses Meta Ads Manager campaign export (Day breakdown).
  *
  * Required columns:
- *   "Reporting starts", "Campaign name", "Amount spent (USD)",
+ *   "Reporting starts", "Campaign ID", "Campaign name", "Amount spent (USD)",
  *   "Impressions", "Link clicks", "Purchases"
+ *   (Campaign ID is needed for UTM matching since Meta tags URLs with {{campaign.id}}, not {{campaign.name}})
  *
- * Returns: { rows: [{ campaignName, date, spend, impressions, clicks, purchases }], parsed, skipped }
+ * Returns: { rows: [{ campaignId, campaignName, date, spend, impressions, clicks, purchases }], parsed, skipped }
  */
 export function parseMetaCsv(fileText) {
   const lines = fileText.split(/\r?\n/).filter(l => l.trim());
@@ -51,6 +52,7 @@ export function parseMetaCsv(fileText) {
   const headers = parseCSVRow(lines[0]);
 
   const iDate      = requireCol(headers, 'Reporting starts');
+  const iCampaignId = requireCol(headers, 'Campaign ID');
   const iCampaign  = requireCol(headers, 'Campaign name');
   const iSpend     = requireCol(headers, 'Amount spent (USD)');
   const iImpr      = requireCol(headers, 'Impressions');
@@ -66,6 +68,7 @@ export function parseMetaCsv(fileText) {
     const date = fields[iDate];
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { skipped++; continue; }
     rows.push({
+      campaignId:   fields[iCampaignId] ? String(fields[iCampaignId]).trim() : null,
       campaignName: fields[iCampaign] || '(unknown)',
       date,
       spend:       num(fields[iSpend]),
@@ -89,9 +92,9 @@ export function parseMetaCsv(fileText) {
  *   Row 2: real headers
  *   Row 3+: data
  *
- * Required columns: "Week", "Campaign", "Cost", "Impr.", "Clicks", "Conversions"
+ * Required columns: "Week", "Campaign ID", "Campaign", "Cost", "Impr.", "Clicks", "Conversions"
  *
- * Returns: { rows: [{ campaignName, weekStart, spend, impressions, clicks, conversions }], parsed, skipped }
+ * Returns: { rows: [{ campaignId, campaignName, weekStart, spend, impressions, clicks, conversions }], parsed, skipped }
  */
 export function parseGoogleCsv(fileText) {
   const lines = fileText.split(/\r?\n/).filter(l => l.trim());
@@ -100,6 +103,7 @@ export function parseGoogleCsv(fileText) {
   const headers = parseCSVRow(lines[2]);
 
   const iWeek        = requireCol(headers, 'Week');
+  const iCampaignId  = requireCol(headers, 'Campaign ID');
   const iCampaign    = requireCol(headers, 'Campaign');
   const iCost        = requireCol(headers, 'Cost');
   const iImpr        = requireCol(headers, 'Impr.');
@@ -115,6 +119,7 @@ export function parseGoogleCsv(fileText) {
     const weekStart = fields[iWeek];
     if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) { skipped++; continue; }
     rows.push({
+      campaignId:   fields[iCampaignId] ? String(fields[iCampaignId]).trim() : null,
       campaignName: fields[iCampaign] || '(unknown)',
       weekStart,
       spend:       num(fields[iCost]),
