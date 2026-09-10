@@ -18,15 +18,15 @@ function TodayCard({ label, value, change, invertGood = false }) {
   const isGood     = invertGood ? !isPositive : isPositive;
 
   return (
-    <div style={{
+    <div className="today-card" style={{
       background: 'rgba(255,255,255,0.07)',
       border: '0.5px solid rgba(255,255,255,0.1)',
       borderRadius: 8, padding: '9px 11px', minWidth: 0,
     }}>
-      <div style={{ fontSize:9, fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:'rgba(200,191,176,0.6)', marginBottom:4 }}>
+      <div className="today-lbl" style={{ fontSize:9, fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:'rgba(200,191,176,0.6)', marginBottom:4 }}>
         {label}
       </div>
-      <div style={{ fontSize:18, fontWeight:500, color:'#F5F2EA', lineHeight:1.1 }}>
+      <div className="today-val" style={{ fontSize:18, fontWeight:500, color:'#F5F2EA', lineHeight:1.1 }}>
         {value}
       </div>
       <div style={{ marginTop:4, display:'flex', alignItems:'center', gap:4, flexWrap:'wrap' }}>
@@ -55,8 +55,13 @@ export function TodayStrip({ today }) {
   return (
     <div style={{ background:'#3D3226', padding:'10px 16px', flexShrink:0, borderBottom:'2px solid #5A4A38' }}>
       <style>{`
-        .today-cards { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
-        @media (max-width:767px) { .today-cards { grid-template-columns:repeat(2,1fr); } }
+        .today-cards { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+        @media (max-width:767px) {
+          .today-cards { grid-template-columns:repeat(4,1fr); gap:4px; }
+          .today-card  { padding:6px 7px !important; }
+          .today-val   { font-size:14px !important; }
+          .today-lbl   { font-size:8px !important; }
+        }
       `}</style>
 
       <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
@@ -78,7 +83,6 @@ export function TodayStrip({ today }) {
         <TodayCard label="Orders today"  value={fmt.num(today.orders)}       change={today.ordersVsYest} />
         <TodayCard label="AOV today"     value={fmt.usd(today.aov)}          change={today.aovVsYest} />
         <TodayCard label="New customers" value={fmt.num(today.newCustomers)} change={today.newCustVsYest} />
-        <TodayCard label="Cart abandon"  value={today.cartAbandon != null ? fmt.pct(today.cartAbandon) : 'GA4 pending'} change={today.cartAbandonVsYest} invertGood={true} />
       </div>
     </div>
   );

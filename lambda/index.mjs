@@ -629,6 +629,38 @@ async function handleManualWholesaleParse(rawBody) {
   }
 }
 
+// ── campaign CSV upload storage (S3, same bucket as cost-snapshots) ──────────
+
+const CAMPAIGNS_META_KEY   = 'campaigns/meta.json';
+const CAMPAIGNS_GOOGLE_KEY = 'campaigns/google.json';
+
+async function handleCampaignsData() {
+  const bucket = process.env.COST_SNAPSHOTS_BUCKET;
+  if (!bucket) return ok({ meta: null, google: null });
+  const [metaRes, googleRes] = await Promise.allSettled([
+    s3.send(new GetObjectCommand({ Bucket: bucket, Key: CAMPAIGNS_META_KEY })),
+    s3.send(new GetObjectCommand({ Bucket: bucket, Key: CAMPAIGNS_GOOGLE_KEY })),
+  ]);
+  const meta   = metaRes.status   === 'fulfilled' ? JSON.parse(await metaRes.value.Body.transformToString())   : null;
+  const google = googleRes.status === 'fulfilled' ? JSON.parse(await googleRes.value.Body.transformToString()) : null;
+  return ok({ meta, google });
+}
+
+async function handleCampaignUpload(rawBody) {
+  const bucket = process.env.COST_SNAPSHOTS_BUCKET;
+  if (!bucket) return err(500, 'COST_SNAPSHOTS_BUCKET not configured');
+  const { platform, rows, uploadedAt } = JSON.parse(rawBody);
+  if (!['meta', 'google'].includes(platform)) return err(400, `Unknown platform: ${platform}`);
+  if (!Array.isArray(rows)) return err(400, 'rows must be an array');
+  const key = platform === 'meta' ? CAMPAIGNS_META_KEY : CAMPAIGNS_GOOGLE_KEY;
+  await s3.send(new PutObjectCommand({
+    Bucket: bucket, Key: key,
+    Body: JSON.stringify({ uploadedAt: uploadedAt || new Date().toISOString(), rows }),
+    ContentType: 'application/json',
+  }));
+  return ok({ saved: rows.length, platform, uploadedAt });
+}
+
 // ── main handler ──────────────────────────────────────────────────────────────
 
 // Static dashboard API key. Function-URL CORS already restricts browser
@@ -718,6 +750,14 @@ export const handler = async (event) => {
 
   if (rawPath === '/manual-wholesale/parse') {
     return handleManualWholesaleParse(event.body || '{}');
+  }
+
+  if (rawPath === '/campaigns/data') {
+    return handleCampaignsData();
+  }
+
+  if (rawPath === '/campaigns/upload') {
+    return handleCampaignUpload(event.body || '{}');
   }
 
   return err(404, `Route not found: ${rawPath}`);
