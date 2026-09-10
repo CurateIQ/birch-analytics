@@ -27,8 +27,9 @@ const fmt = {
 const DEFS = {
   cpc:    'Cost per click from the platform\'s own data. A delivery metric — no attribution ambiguity.',
   cpm:    'Cost per 1,000 impressions from the platform\'s own data.',
-  cac:    'Ad spend ÷ new customers attributed via last non-direct click (Shopify order data), not the platform\'s self-reported conversions. New customer = first-ever Shopify order.',
-  google: 'Google Ads data is uploaded weekly (Monday–Sunday), so this reflects the most recent complete week(s) rather than a rolling window like Meta\'s.',
+  cac:       'Ad spend ÷ new customers attributed via last non-direct click (Shopify order data), not the platform\'s self-reported conversions. New customer = first-ever Shopify order.',
+  cacGoogle: 'Google\'s own reported conversions ÷ spend. NOT the same last-non-direct-click methodology used for Meta\'s CAC — Google Ads traffic uses auto-tagging (gclid), not UTM parameters, so Shopify cannot attribute it to specific campaigns. This number may include repeat customers and uses Google\'s own attribution window, not ours. Treat as directional only.',
+  google:    'Google Ads data is uploaded weekly (Monday–Sunday), so this reflects the most recent complete week(s) rather than a rolling window like Meta\'s.',
 };
 
 // ── layout sub-components ─────────────────────────────────────────────────────
@@ -439,8 +440,8 @@ export function CampaignsPage({ data, onBack }) {
                   label="CAC (last complete week)"
                   value={fmt.usdDec(google?.cacLastWeek)}
                   change={null}
-                  changeLabel={google?.cacLastWeek == null ? 'pending match' : null}
-                  definition={DEFS.cac + ' ' + DEFS.google}
+                  changeLabel={google?.cacLastWeek != null ? "Google's own data" : (!google?.hasData ? 'no data' : null)}
+                  definition={DEFS.cacGoogle + ' ' + DEFS.google}
                 />
                 <KPICard
                   label="CPC (last 4 weeks)"
@@ -460,8 +461,8 @@ export function CampaignsPage({ data, onBack }) {
                   label="CAC (last 4 weeks)"
                   value={fmt.usdDec(google?.cacLast4Weeks)}
                   change={null}
-                  changeLabel={google?.cacLast4Weeks == null ? 'pending match' : null}
-                  definition={DEFS.cac + ' ' + DEFS.google}
+                  changeLabel={google?.cacLast4Weeks != null ? "Google's own data" : (!google?.hasData ? 'no data' : null)}
+                  definition={DEFS.cacGoogle + ' ' + DEFS.google}
                 />
               </div>
               {google?.lastCompleteWeek && (

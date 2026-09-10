@@ -94,20 +94,35 @@ function aggregateGoogleRows(rows, weekStarts) {
     ...c,
     cpc: c.clicks > 0 ? Math.round((c.spend / c.clicks) * 100) / 100 : null,
     cpm: c.impressions > 0 ? Math.round((c.spend / (c.impressions / 1000)) * 100) / 100 : null,
-    cac: null, // Google attribution not wired in this build
+    // Google's own reported conversions — not last-click Shopify attribution (UTM tagging gap)
+    cac: c.conversions > 0 ? Math.round((c.spend / c.conversions) * 100) / 100 : null,
   }));
 }
 
 function sumCampaigns(campaigns) {
-  const spend       = campaigns.reduce((s, c) => s + (c.spend || 0), 0);
-  const clicks      = campaigns.reduce((s, c) => s + (c.clicks || 0), 0);
-  const impressions = campaigns.reduce((s, c) => s + (c.impressions || 0), 0);
+  const spend        = campaigns.reduce((s, c) => s + (c.spend || 0), 0);
+  const clicks       = campaigns.reduce((s, c) => s + (c.clicks || 0), 0);
+  const impressions  = campaigns.reduce((s, c) => s + (c.impressions || 0), 0);
   const newCustomers = campaigns.reduce((s, c) => s + (c.newCustomerCount || 0), 0);
   return {
     spend,
     cpc: clicks > 0 ? Math.round((spend / clicks) * 100) / 100 : null,
     cpm: impressions > 0 ? Math.round((spend / (impressions / 1000)) * 100) / 100 : null,
     cac: newCustomers > 0 ? Math.round((spend / newCustomers) * 100) / 100 : null,
+  };
+}
+
+// Google totals: uses platform-reported conversions, not Shopify new-customer count
+function sumGoogleCampaigns(campaigns) {
+  const spend       = campaigns.reduce((s, c) => s + (c.spend || 0), 0);
+  const clicks      = campaigns.reduce((s, c) => s + (c.clicks || 0), 0);
+  const impressions = campaigns.reduce((s, c) => s + (c.impressions || 0), 0);
+  const conversions = campaigns.reduce((s, c) => s + (c.conversions || 0), 0);
+  return {
+    spend,
+    cpc: clicks > 0 ? Math.round((spend / clicks) * 100) / 100 : null,
+    cpm: impressions > 0 ? Math.round((spend / (impressions / 1000)) * 100) / 100 : null,
+    cac: conversions > 0 ? Math.round((spend / conversions) * 100) / 100 : null,
   };
 }
 
@@ -174,8 +189,8 @@ export async function fetchCampaignPageData() {
     if (jGoogleMonth.status === 'fulfilled') joinedGoogleLast4Weeks = attributeCampaignsToAdPlatform(googleLast4Weeks, jGoogleMonth.value, 'google');
   }
 
-  const googleLastWeekTotals    = sumCampaigns(joinedGoogleLastWeek.campaigns);
-  const googleLast4WeeksTotals  = sumCampaigns(joinedGoogleLast4Weeks.campaigns);
+  const googleLastWeekTotals    = sumGoogleCampaigns(joinedGoogleLastWeek.campaigns);
+  const googleLast4WeeksTotals  = sumGoogleCampaigns(joinedGoogleLast4Weeks.campaigns);
 
   return {
     meta: {

@@ -411,7 +411,11 @@ const ORDERS_JOURNEY_QUERY = `
       edges {
         node {
           id
-          customer { numberOfOrders }
+          customer {
+            orders(first: 1, sortKey: CREATED_AT) {
+              edges { node { id } }
+            }
+          }
           customerJourneySummary {
             lastVisit { utmParameters { source medium campaign } }
           }
@@ -445,9 +449,10 @@ async function handleShopifyOrdersJourney(queryString) {
       const edges = result.body?.data?.orders?.edges || [];
       edges.forEach(({ node }) => {
         const utm = node.customerJourneySummary?.lastVisit?.utmParameters;
+        const firstOrderId = node.customer?.orders?.edges?.[0]?.node?.id;
         orders.push({
           orderId: node.id,
-          isNewCustomer: parseInt(node.customer?.numberOfOrders, 10) === 1,
+          isNewCustomer: firstOrderId === node.id,
           utmSource: utm?.source || null,
           utmMedium: utm?.medium || null,
           utmCampaign: utm?.campaign || null,
