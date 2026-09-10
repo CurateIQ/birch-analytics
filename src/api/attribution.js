@@ -33,16 +33,16 @@ function normalize(str) {
 }
 
 // ── platform source detection ─────────────────────────────────────────────────
-
-const META_SOURCES   = ['facebook', 'instagram', 'fb', 'ig'];
-const GOOGLE_SOURCES = ['google', 'googleads', 'adwords'];
+// Both source AND medium must indicate paid traffic for that platform.
+// OR-logic (source alone) incorrectly scoops up organic search/referral:
+//   e.g. utm_source=google&utm_medium=organic is NOT a Google Ad.
 
 function isFromPlatform(order, platform) {
   const src = (order.utmSource || '').toLowerCase();
   const med = (order.utmMedium || '').toLowerCase();
-  if (platform === 'meta')   return META_SOURCES.includes(src) || med === 'paid_social';
-  if (platform === 'google') return GOOGLE_SOURCES.includes(src) || med === 'cpc';
-  return true;
+  if (platform === 'meta')   return (src === 'facebook' || src === 'instagram') && med === 'paid_social';
+  if (platform === 'google') return src === 'google' && med === 'cpc';
+  return false;
 }
 
 // ── matching ─────────────────────────────────────────────────────────────────
@@ -91,6 +91,16 @@ export function attributeCampaignsToAdPlatform(adCampaigns, journeyOrders, platf
   const grouped = aggregateNewCustomersByCampaign(journeyOrders, platform);
   const usedUtm = new Set();
 
+  // Debug: log what UTM campaign values we're trying to match so ID mismatches are visible
+  if (grouped.length > 0) {
+    const availableIds   = (adCampaigns || []).map(c => c.campaignId).filter(Boolean);
+    const availableNames = (adCampaigns || []).map(c => c.campaignName);
+    const utmValues      = grouped.map(g => g.utmCampaign);
+    console.debug(`[attribution:${platform}] UTM campaign values from Shopify:`, utmValues);
+    console.debug(`[attribution:${platform}] CSV campaign IDs available:`, availableIds);
+    console.debug(`[attribution:${platform}] CSV campaign names available:`, availableNames);
+  }
+
   const campaigns = (adCampaigns || []).map(c => {
     const match = grouped.find(g => matchCampaignToAdPlatform(g.utmCampaign, c));
     if (match) usedUtm.add(match.utmCampaign);
@@ -103,6 +113,10 @@ export function attributeCampaignsToAdPlatform(adCampaigns, journeyOrders, platf
   const unmatched = grouped
     .filter(g => g.utmCampaign !== '(none)' && !usedUtm.has(g.utmCampaign))
     .map(g => g.utmCampaign);
+
+  if (unmatched.length > 0) {
+    console.debug(`[attribution:${platform}] Unmatched UTM campaigns (passed source filter but no campaign match):`, unmatched);
+  }
 
   return { campaigns, unmatched };
 }
