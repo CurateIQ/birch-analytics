@@ -34,13 +34,23 @@ function normalize(str) {
 
 // ── platform source detection ─────────────────────────────────────────────────
 // Both source AND medium must indicate paid traffic for that platform.
-// OR-logic (source alone) incorrectly scoops up organic search/referral:
-//   e.g. utm_source=google&utm_medium=organic is NOT a Google Ad.
+// OR-logic (source alone) incorrectly scoops up organic/referral traffic.
+//
+// Real values observed from /shopify/orders-journey (verified 2026-09-10):
+//   Meta:   source=facebook medium=paid      (campaign = numeric ID)
+//           source=ig       medium=social    (campaign usually empty)
+//   Google: source=google   medium=product_sync  ← Shopping feed auto-tag, NOT Google Ads
+//           Google Ads paid campaigns would use medium=cpc when running
+//   Other:  || (direct), Klaviyo|email, affiliate|uppromote — all excluded
+
+const META_PAID_MEDIUMS = new Set(['paid', 'paid_social', 'social']);
 
 function isFromPlatform(order, platform) {
   const src = (order.utmSource || '').toLowerCase();
   const med = (order.utmMedium || '').toLowerCase();
-  if (platform === 'meta')   return (src === 'facebook' || src === 'instagram') && med === 'paid_social';
+  // Meta: facebook or ig source, with a paid/social medium (not organic/referral)
+  if (platform === 'meta')   return (src === 'facebook' || src === 'ig' || src === 'instagram') && META_PAID_MEDIUMS.has(med);
+  // Google: cpc medium indicates actual Google Ads (product_sync = Shopping feed, not attributable to campaigns)
   if (platform === 'google') return src === 'google' && med === 'cpc';
   return false;
 }
@@ -91,15 +101,17 @@ export function attributeCampaignsToAdPlatform(adCampaigns, journeyOrders, platf
   const grouped = aggregateNewCustomersByCampaign(journeyOrders, platform);
   const usedUtm = new Set();
 
-  // Debug: log what UTM campaign values we're trying to match so ID mismatches are visible
-  if (grouped.length > 0) {
-    const availableIds   = (adCampaigns || []).map(c => c.campaignId).filter(Boolean);
-    const availableNames = (adCampaigns || []).map(c => c.campaignName);
-    const utmValues      = grouped.map(g => g.utmCampaign);
-    console.debug(`[attribution:${platform}] UTM campaign values from Shopify:`, utmValues);
-    console.debug(`[attribution:${platform}] CSV campaign IDs available:`, availableIds);
-    console.debug(`[attribution:${platform}] CSV campaign names available:`, availableNames);
-  }
+  // Debug: log what UTM campaign values we're trying to match so ID mismatches are visible.
+  // To diagnose: open browser console, upload CSVs, check these lines.
+  // If "CSV campaign IDs available" is empty → CSV was exported without Campaign ID column (re-export needed).
+  // If IDs appear in both lists but still unmatched → type/whitespace mismatch in the values.
+  const availableIds   = (adCampaigns || []).map(c => c.campaignId).filter(Boolean);
+  const availableNames = (adCampaigns || []).map(c => c.campaignName);
+  const utmValues      = grouped.map(g => g.utmCampaign);
+  console.debug(`[attribution:${platform}] ${grouped.length} platform-attributed orders passed source filter`);
+  console.debug(`[attribution:${platform}] UTM campaign values from Shopify:`, utmValues);
+  console.debug(`[attribution:${platform}] CSV campaign IDs available (${availableIds.length}):`, availableIds);
+  console.debug(`[attribution:${platform}] CSV campaign names available:`, availableNames);
 
   const campaigns = (adCampaigns || []).map(c => {
     const match = grouped.find(g => matchCampaignToAdPlatform(g.utmCampaign, c));
