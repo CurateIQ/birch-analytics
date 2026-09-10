@@ -318,7 +318,7 @@ export function CampaignsPage({ data, onBack }) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, []); // eslint-disable-line
 
   const meta   = campaignData?.meta;
   const google = campaignData?.google;
