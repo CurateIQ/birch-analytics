@@ -341,6 +341,13 @@ export async function fetchDwellingItems() {
   const items = [];
 
   for (const order of orders) {
+    // Registry orders (held for a future ship date) are excluded — they will
+    // dwell intentionally and are not actionable by ops.
+    const isRegistry = (order.line_items || []).some(li =>
+      (li.properties || []).some(p => p.name === '_registry_id')
+    );
+    if (isRegistry) continue;
+
     const ageMs = now - new Date(order.created_at).getTime();
     const dwellHours = Math.floor(ageMs / (60 * 60 * 1000));
     for (const item of (order.line_items || [])) {
@@ -386,6 +393,11 @@ export async function fetchLateDeliveries() {
   const items = [];
 
   for (const order of orders) {
+    const isRegistry = (order.line_items || []).some(li =>
+      (li.properties || []).some(p => p.name === '_registry_id')
+    );
+    if (isRegistry) continue;
+
     const daysOld = Math.floor((now - new Date(order.created_at).getTime()) / (24 * 60 * 60 * 1000));
     const dest = [order.shipping_address?.city, order.shipping_address?.province_code]
       .filter(Boolean).join(', ') || '—';
