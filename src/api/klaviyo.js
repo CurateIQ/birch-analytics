@@ -15,18 +15,18 @@ async function klaviyoFetch(endpoint, params = {}) {
 
 export async function fetchListMetrics() {
   try {
-    const data = await klaviyoFetch('/lists', {
-      'fields[list]': 'name,profile_count,created,updated',
-    });
-    const lists = data.data || [];
-    const totalProfiles = lists.reduce((sum, l) => sum + (l.attributes?.profile_count || 0), 0);
+    const [listsData, countData] = await Promise.allSettled([
+      klaviyoFetch('/lists', { 'fields[list]': 'name,created,updated' }),
+      fetch(`${PROXY}/klaviyo/profile-count`, { headers: PROXY_HEADERS }).then(r => r.json()),
+    ]);
+
+    const lists = listsData.status === 'fulfilled' ? (listsData.value.data || []) : [];
+    const totalProfiles = countData.status === 'fulfilled' ? (countData.value.total ?? null) : null;
+
     return {
       totalLists: lists.length,
       totalProfiles,
-      lists: lists.map(l => ({
-        name: l.attributes?.name,
-        count: l.attributes?.profile_count,
-      })),
+      lists: lists.map(l => ({ name: l.attributes?.name })),
     };
   } catch (err) {
     console.error('Klaviyo fetch error:', err);
