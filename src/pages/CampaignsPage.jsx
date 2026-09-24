@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { KPICard } from '../components/KPICard';
 import { fetchCampaignPageData, uploadCampaignData } from '../api/campaignData';
 import { parseMetaCsv, parseGoogleCsv } from '../utils/parseCampaignCsv';
@@ -299,6 +300,137 @@ function uploadBadgeText(uploadedAt, dateRange) {
   return `Data as of ${dateStr} upload${range}`;
 }
 
+// ── Total Ad Spend section ────────────────────────────────────────────────────
+
+const META_COLOR   = '#5A7A5C';
+const GOOGLE_COLOR = '#378ADD';
+
+function pct(n, d) { return d > 0 ? Math.round((n / d) * 100) : 0; }
+function wow(curr, prev) {
+  if (curr == null || prev == null || prev === 0) return null;
+  return Math.round(((curr - prev) / prev) * 100);
+}
+
+function SpendTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const meta   = payload.find(p => p.dataKey === 'metaSpend')?.value ?? 0;
+  const google = payload.find(p => p.dataKey === 'googleSpend')?.value ?? 0;
+  const total  = meta + google;
+  return (
+    <div style={{ background: '#FFFFFF', border: '0.5px solid #E0DDD6', borderRadius: 6, padding: '8px 12px', fontSize: 11 }}>
+      <div style={{ color: '#8C8A85', marginBottom: 4 }}>w/o {label}</div>
+      <div style={{ color: META_COLOR,   fontFamily: 'DM Mono, monospace' }}>Meta   ${meta.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+      <div style={{ color: GOOGLE_COLOR, fontFamily: 'DM Mono, monospace' }}>Google ${google.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+      <div style={{ color: '#3D3226', fontWeight: 600, marginTop: 4, fontFamily: 'DM Mono, monospace' }}>Total  ${total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+    </div>
+  );
+}
+
+function TotalAdSpendSection({ weekly }) {
+  if (!weekly?.length) return null;
+
+  const thisWeek = weekly[0];
+  const lastWeek = weekly[1] ?? null;
+  const wowChange = wow(thisWeek?.totalSpend, lastWeek?.totalSpend);
+  const metaPct   = pct(thisWeek?.metaSpend,   thisWeek?.totalSpend);
+  const googlePct = pct(thisWeek?.googleSpend, thisWeek?.totalSpend);
+
+  // Chart data — oldest first for left→right chronology
+  const chartData = [...weekly].reverse().map(w => ({
+    weekLabel:   w.weekStart.slice(5), // MM-DD
+    metaSpend:   w.metaSpend,
+    googleSpend: w.googleSpend,
+    totalSpend:  w.totalSpend,
+  }));
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <SectionLabel>Total Ad Spend</SectionLabel>
+
+      {/* Stat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
+        <KPICard
+          label="This week (combined)"
+          value={thisWeek?.totalSpend != null ? `$${Math.round(thisWeek.totalSpend).toLocaleString()}` : '—'}
+          change={null}
+          changeLabel={thisWeek?.weekStart ? `w/o ${thisWeek.weekStart}` : null}
+        />
+        <KPICard
+          label="WoW change"
+          value={wowChange != null ? `${wowChange > 0 ? '+' : ''}${wowChange}%` : '—'}
+          change={wowChange}
+          changeLabel={lastWeek ? `vs w/o ${lastWeek.weekStart}` : 'prior week'}
+        />
+        <KPICard
+          label="Platform split (this week)"
+          value={`Meta ${metaPct}% / Google ${googlePct}%`}
+          change={null}
+          changeLabel={null}
+        />
+      </div>
+
+      {/* Stacked bar chart */}
+      <div style={{ background: '#FFFFFF', border: '0.5px solid #E0DDD6', borderRadius: 10, padding: '14px', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#3D3226', marginBottom: 10 }}>
+          Weekly spend by platform
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12, marginLeft: 14, fontWeight: 400, fontSize: 10, color: '#8C8A85' }}>
+            <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: META_COLOR, marginRight: 4 }} />Meta</span>
+            <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: GOOGLE_COLOR, marginRight: 4 }} />Google</span>
+          </span>
+        </div>
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+            <XAxis dataKey="weekLabel" tick={{ fontSize: 9, fill: '#8C8A85' }} axisLine={false} tickLine={false} />
+            <YAxis
+              tick={{ fontSize: 9, fill: '#8C8A85' }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
+              width={36}
+            />
+            <Tooltip content={<SpendTooltip />} />
+            <Bar dataKey="metaSpend"   stackId="a" fill={META_COLOR}   radius={[0, 0, 0, 0]} />
+            <Bar dataKey="googleSpend" stackId="a" fill={GOOGLE_COLOR} radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Summary table */}
+      <div style={{ background: '#FFFFFF', border: '0.5px solid #E0DDD6', borderRadius: 10, padding: '12px 14px' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#3D3226', marginBottom: 10 }}>Week-by-week breakdown</div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr>
+                {['Week', 'Meta', 'Google', 'Total', 'Avg/day'].map(h => (
+                  <th key={h} style={{ ...TBL_HEAD, textAlign: h === 'Week' ? 'left' : 'right', paddingRight: h !== 'Week' ? 10 : 0 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {weekly.map((w, i) => {
+                const avgDay = Math.round(w.totalSpend / 7);
+                return (
+                  <tr key={w.weekStart}>
+                    <td style={{ ...TBL_CELL, color: '#3D3226', fontFamily: 'DM Mono, monospace' }}>w/o {w.weekStart}</td>
+                    <td style={{ ...TBL_CELL, textAlign: 'right', paddingRight: 10, fontFamily: 'DM Mono, monospace', color: META_COLOR }}>{fmt.usd(w.metaSpend)}</td>
+                    <td style={{ ...TBL_CELL, textAlign: 'right', paddingRight: 10, fontFamily: 'DM Mono, monospace', color: GOOGLE_COLOR }}>{fmt.usd(w.googleSpend)}</td>
+                    <td style={{ ...TBL_CELL, textAlign: 'right', paddingRight: 10, fontFamily: 'DM Mono, monospace', fontWeight: 600 }}>{fmt.usd(w.totalSpend)}</td>
+                    <td style={{ ...TBL_CELL, textAlign: 'right', fontFamily: 'DM Mono, monospace', color: '#8C8A85' }}>{fmt.usd(avgDay)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ fontSize: 9, color: '#C8BFB0', marginTop: 6 }}>
+          Meta daily rows bucketed into Mon-start weeks · Google rows are natively weekly (Mon–Sun) · Avg/day = total ÷ 7
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── main page ─────────────────────────────────────────────────────────────────
 
 export function CampaignsPage({ data, onBack }) {
@@ -321,8 +453,9 @@ export function CampaignsPage({ data, onBack }) {
 
   useEffect(() => { load(); }, []); // eslint-disable-line
 
-  const meta   = campaignData?.meta;
-  const google = campaignData?.google;
+  const meta     = campaignData?.meta;
+  const google   = campaignData?.google;
+  const combined = campaignData?.combined;
 
   // Date ranges for GA4 drill-down — use rolling windows consistent with KPI cards
   const now           = new Date();
@@ -384,6 +517,9 @@ export function CampaignsPage({ data, onBack }) {
 
       {!loading && (
         <>
+          {/* Total Ad Spend — combined view, above platform panels */}
+          {combined?.hasData && <TotalAdSpendSection weekly={combined.weekly} />}
+
           {/* KPI row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
 

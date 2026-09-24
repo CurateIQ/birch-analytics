@@ -132,13 +132,58 @@ function dateRangeOf(rows, dateKey) {
   return { start: dates[0], end: dates[dates.length - 1] };
 }
 
+// ── combined weekly spend ─────────────────────────────────────────────────────
+
+/** Round a YYYY-MM-DD date string down to the Monday of its week */
+function toMonday(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Builds a combined weekly spend array from raw Meta daily rows and Google weekly rows.
+ * Meta rows are bucketed into Mon-start weeks to align with Google's native weekly format.
+ * Returns array of { weekStart, metaSpend, googleSpend, totalSpend }, newest first.
+ */
+export function buildCombinedWeeklySpend(metaRows = [], googleRows = []) {
+  const map = {};
+
+  // Bucket Meta daily rows into weeks
+  for (const r of metaRows) {
+    const ws = toMonday(r.date);
+    if (!map[ws]) map[ws] = { weekStart: ws, metaSpend: 0, googleSpend: 0 };
+    map[ws].metaSpend += r.spend || 0;
+  }
+
+  // Merge Google weekly rows (already Mon-start)
+  for (const r of googleRows) {
+    const ws = r.weekStart;
+    if (!map[ws]) map[ws] = { weekStart: ws, metaSpend: 0, googleSpend: 0 };
+    map[ws].googleSpend += r.spend || 0;
+  }
+
+  return Object.values(map)
+    .map(w => ({
+      ...w,
+      metaSpend:   Math.round(w.metaSpend   * 100) / 100,
+      googleSpend: Math.round(w.googleSpend * 100) / 100,
+      totalSpend:  Math.round((w.metaSpend + w.googleSpend) * 100) / 100,
+    }))
+    .sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+}
+
 // ── public API ────────────────────────────────────────────────────────────────
 
 export async function fetchCampaignPageData() {
   const stored = await fetchStoredCampaignData();
+  const metaRowsRaw   = stored?.meta?.rows   || [];
+  const googleRowsRaw = stored?.google?.rows || [];
 
-  const metaRows   = stored?.meta?.rows   || [];
-  const googleRows = stored?.google?.rows || [];
+  const metaRows   = metaRowsRaw;
+  const googleRows = googleRowsRaw;
 
   const now           = new Date();
   const sevenDaysAgo  = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
@@ -192,7 +237,13 @@ export async function fetchCampaignPageData() {
   const googleLastWeekTotals    = sumGoogleCampaigns(joinedGoogleLastWeek.campaigns);
   const googleLast4WeeksTotals  = sumGoogleCampaigns(joinedGoogleLast4Weeks.campaigns);
 
+  const combinedWeekly = buildCombinedWeeklySpend(metaRowsRaw, googleRowsRaw);
+
   return {
+    combined: {
+      weekly: combinedWeekly,
+      hasData: combinedWeekly.length > 0,
+    },
     meta: {
       hasData:    metaRows.length > 0,
       uploadedAt: stored?.meta?.uploadedAt || null,
